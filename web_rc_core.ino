@@ -1,6 +1,5 @@
 // web_rc_core.ino
 // Web RC 核心模块 - 基础版（无气压定高功能）
-// 修复横滚锁定和油门问题
 
 #if WEB_RC_ENABLED
 
@@ -35,6 +34,18 @@ WebServer webRCServer(8080);
 // P0修复: 网络超时和心跳配置
 #define WEB_RC_TIMEOUT_MS      10000  // 连接超时阈值 (10秒，适应高延迟)
 #define WEB_RC_HEARTBEAT_MS    5000   // 心跳间隔 (5秒，小于超时阈值一半)
+
+// ==================== 代码配置常量（替代前端参数调节面板）====================
+#define CONFIG_THROTTLE_SCALE   1.0f    // 油门灵敏度系数（0.0~1.0）
+#define CONFIG_STICK_SCALE      0.85f   // 摇杆灵敏度系数（0.0~1.0）
+#define CONFIG_YAW_SCALE        0.68f   // 偏航灵敏度系数（0.0~1.0）
+#define CONFIG_STICK_DEADZONE   0.10f   // 摇杆死区（相对0~1）
+#define CONFIG_THROTTLE_DEADZONE 0.15f  // 油门死区（相对0~1）
+
+// ==================== 电池电压 ADC ====================
+#define VBAT_ADC_PIN     36             // GPIO36 (VP) 通过分压采集电池电压
+#define VBAT_ADC_SAMPLES 16             // 多次采样取均值降低噪声
+#define VBAT_DIVIDER     (43.0f / 33.0f)// 分压比: 10kΩ+33kΩ, Vbat=(Vadc*43/33)
 
 // ==================== 全局变量定义 ====================
 bool webRCEnabled = false;
@@ -199,7 +210,6 @@ void handleJoystickCommandBinary(uint8_t* data, size_t len);
 void handleDeltaCommand(uint8_t* data, size_t len);
 void processJoystickData(float throttle, float roll, float pitch, float yaw, uint32_t timestamp);
 void handleButtonCommandBinary(uint8_t* data, size_t len);
-void handleParamsCommandBinary(uint8_t* data, size_t len);
 void sendBinaryResponse(uint8_t command, bool success, uint16_t latency);
 
 // 工具函数声明
@@ -432,6 +442,30 @@ const char* findJsonValue(const char* json, const char* key) {
     return valueStart;
 }
 
+// ==================== 电池电压读取 ====================
+float readBatteryVoltage() {
+    long sum = 0;
+    for (int i = 0; i < VBAT_ADC_SAMPLES; i++) {
+        sum += analogRead(VBAT_ADC_PIN);
+    }
+    float vADC = (sum / (float)VBAT_ADC_SAMPLES / 4095.0f) * 3.3f;
+    return vADC * VBAT_DIVIDER;
+}
+
+// ==================== 控制台日志缓冲区 ====================
+#define CONSOLE_LINES   30
+#define CONSOLE_LINE_LEN 80
+static char consoleBuf[CONSOLE_LINES][CONSOLE_LINE_LEN];
+static int  consoleTail = 0;   // 下一条写入的位置（环形）
+static int  consoleFilled = 0; // 已填充行数（最大CONSOLE_LINES）
+
+void webLog(const char* msg) {
+    strncpy(consoleBuf[consoleTail], msg, CONSOLE_LINE_LEN - 1);
+    consoleBuf[consoleTail][CONSOLE_LINE_LEN - 1] = '\0';
+    consoleTail = (consoleTail + 1) % CONSOLE_LINES;
+    if (consoleFilled < CONSOLE_LINES) consoleFilled++;
+}
+
 // ====================== 核心功能函数 ======================
 void setWebRCInput(float roll, float pitch, float yaw, float throttle, uint16_t buttons) {
     // 首先进行基本验证 - 修复：在验证前先约束范围
@@ -583,9 +617,6 @@ bool handleBinaryProtocol(uint8_t* data, size_t len) {
         case COMMAND_BUTTON:
             handleButtonCommandBinary(data, len);
             break;
-        case COMMAND_PARAMS:
-            handleParamsCommandBinary(data, len);
-            break;
         case COMMAND_HEARTBEAT:
             netMonitor.update(0, len);
             webRCLastUpdate = millis();
@@ -686,20 +717,6 @@ void handleButtonCommandBinary(uint8_t* data, size_t len) {
         }
         
         sendBinaryResponse(COMMAND_BUTTON, true, netMonitor.getLatency());
-    }
-}
-
-void handleParamsCommandBinary(uint8_t* data, size_t len) {
-    if (len >= 8) {  // 1+1+2+2+2=8字节
-        int16_t throttleScale = (data[2] << 8) | data[3];
-        int16_t stickScale = (data[4] << 8) | data[5];
-        int16_t yawScale = (data[6] << 8) | data[7];
-        
-        webRCThrottleScale = int16ToFloat(throttleScale);
-        webRCStickScale = int16ToFloat(stickScale);
-        webRCYawScale = int16ToFloat(yawScale);
-        
-        sendBinaryResponse(COMMAND_PARAMS, true, 0);
     }
 }
 
@@ -821,13 +838,8 @@ bool handleJSONProtocol(String& body) {
             }
             break;
         }
-        case 5: { // 参数命令（前端发送百分比整数，除以100转换为0~1乘数）
-            const char* val;
-            if ((val = findJsonValue(json, "\"ths\""))) webRCThrottleScale = atof(val) / 100.0f;
-            if ((val = findJsonValue(json, "\"sss\""))) webRCStickScale = atof(val) / 100.0f;
-            if ((val = findJsonValue(json, "\"ys\""))) webRCYawScale = atof(val) / 100.0f;
+        case 5: // 参数命令已移除，由代码中的CONFIG_常量替代
             break;
-        }
         case 4: // 心跳
             netMonitor.update(0, body.length());
             webRCLastUpdate = millis();
@@ -933,14 +945,12 @@ void setupWebRC() {
     print("  修复横滚锁定和油门问题版\n");
     print("==========================================\n");
     
-    // 初始化参数
-    webRCThrottleScale = 1.0f;
-    webRCStickScale = 1.0f;
-    webRCYawScale = 1.0f;
-    
-    // 死区设置 - 10%死区避免操作迟钝
-    stickDeadzone = 0.10f;      // 10%死区（所有摇杆）
-    throttleDeadzone = 0.15f;   // 15%死区（油门）- 只在低端
+    // 使用CONFIG_常量初始化参数（代替前端参数面板）
+    webRCThrottleScale = CONFIG_THROTTLE_SCALE;
+    webRCStickScale    = CONFIG_STICK_SCALE;
+    webRCYawScale      = CONFIG_YAW_SCALE;
+    stickDeadzone      = CONFIG_STICK_DEADZONE;
+    throttleDeadzone   = CONFIG_THROTTLE_DEADZONE;
     
     // 初始化上次有效值
     lastValidThrottle = THROTTLE_MIN;  // 油门从0开始
@@ -967,12 +977,52 @@ void setupWebRC() {
     });
     
     webRCServer.on("/web_rc", HTTP_POST, handleWebRCRequest);
-    
+
+    // ---- 控制台日志接口 ----
+    webRCServer.on("/console", HTTP_GET, []() {
+        String json = "{\"lines\":[";
+        int start = (consoleFilled < CONSOLE_LINES) ? 0 : consoleTail;
+        for (int i = 0; i < consoleFilled; i++) {
+            int idx = (start + i) % CONSOLE_LINES;
+            if (i > 0) json += ",";
+            json += "\"";
+            String line = consoleBuf[idx];
+            line.replace("\\", "\\\\");
+            line.replace("\"", "\\\"");
+            json += line;
+            json += "\"";
+        }
+        json += "]}";
+        webRCServer.send(200, "application/json", json);
+    });
+
+    webRCServer.on("/console/cmd", HTTP_POST, []() {
+        String cmd = webRCServer.arg("plain");
+        cmd.trim();
+        if (cmd.length() > 0) {
+            char logLine[CONSOLE_LINE_LEN];
+            snprintf(logLine, sizeof(logLine), "> %s", cmd.c_str());
+            webLog(logLine);
+            // 解析简单命令
+            if (cmd == "arm")              { armed = true;  webLog("CMD: armed"); }
+            else if (cmd == "disarm")      { armed = false; webLog("CMD: disarmed"); }
+            else if (cmd == "mode stab")   { mode = STAB;   webLog("CMD: mode=STAB"); }
+            else if (cmd == "mode acro")   { mode = ACRO;   webLog("CMD: mode=ACRO"); }
+            else if (cmd == "status") {
+                char s[CONSOLE_LINE_LEN];
+                snprintf(s, sizeof(s), "T=%.1f R=%.1f P=%.1f Y=%.1f arm=%d mode=%d",
+                    webRCThrottle, webRCRoll, webRCPitch, webRCYaw, (int)armed, (int)mode);
+                webLog(s);
+            } else { webLog("Unknown cmd"); }
+        }
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+    });
+
     webRCServer.on("/web_rc/status", HTTP_GET, []() {
         String json = "{";
         json += "\"enabled\":" + String(isWebRCEnabled() ? "true" : "false") + ",";
         json += "\"active\":" + String(isUsingWebRC() ? "true" : "false") + ",";
-        json += "\"battery\":85,";
+        json += "\"voltage\":" + String(readBatteryVoltage(), 2) + ",";
         json += "\"clients\":0,";  // 简化，不依赖WiFi类
         json += "\"current_data\":{";
         json += "\"throttle\":" + String(webRCThrottle, 1) + ",";
@@ -1003,15 +1053,8 @@ void setupWebRC() {
     
     webRCServer.begin();
     
-    print("✓ Web RC服务器已启动\n");
+    print("✓ Web RC 服务端已启动\n");
     print("  访问地址: http://192.168.4.1:8080\n");
-    print("  摇杆限制: 横滚/俯仰/偏航最大±30\n");
-    print("  修复内容:\n");
-    print("  1. 油门0值正确处理为0%%\n");
-    print("  2. 横滚不再锁定在±7.3\n");
-    print("  3. JSON解析错误检测阈值降低\n");
-    print("  4. 死区优化到10%%\n");
-    print("  5. 移除气压定高功能\n");
     print("==========================================\n");
 }
 

@@ -1,5 +1,3 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // Main firmware file 主程序文件 - Web RC版本
 // 源代码使用Arduino IDE 2.3.x以上版本编译，不支持老版本的1.8.19！
 // 必须安装ESP32开发板核心库（即esp32 by Espressif Systems）

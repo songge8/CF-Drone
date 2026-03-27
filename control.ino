@@ -210,49 +210,44 @@ void interpretWebRC() {
 	
 	webRCEnabled = true;
 	useWebRC = true;
-	
-	// 检查Web RC超时（2秒）
-	if (millis() - webRCLastUpdate > 2000) {
-		useWebRC = false;
-		thrustTarget = 0.0f;
-		armed = false;
-		print("Web RC超时 → 失联保护\n");
-		return;
-	}
-	
-	// 处理解锁/上锁按钮
+
+	// 处理解锁/上锁按钮（上升沿检测，避免每个控制周期重复触发）
+	static uint16_t lastWebRCButtons = 0;
+	uint16_t risingEdge = webRCButtons & ~lastWebRCButtons;
+	lastWebRCButtons = webRCButtons;
+
+	// 处理解锁/上锁状态变化日志
 	static bool lastArmedState = false;
 	if (armed != lastArmedState) {
 		print(armed ? "Web RC: 已解锁\n" : "Web RC: 已上锁\n");
 		lastArmedState = armed;
 	}
-	
-	// 按钮0：解锁（油门不超过30%时允许解锁）
-	if (webRCButtons & 0x0001) {
+
+	// 按钮0：解锁（上升沿，油门不超过30%时允许）
+	if (risingEdge & 0x0001) {
 		if (webRCThrottle <= 30.0f) {
 			armed = true;
 		}
-		// 油门过高时不解锁，前端负责给出提示
 	}
-	
-	// 按钮1：上锁
-	if (webRCButtons & 0x0002) {
+
+	// 按钮1：上锁（上升沿）
+	if (risingEdge & 0x0002) {
 		armed = false;
 	}
 
-	// 按钮2：急停
-	if (webRCButtons & 0x0004) {
+	// 按钮2：急停（上升沿）
+	if (risingEdge & 0x0004) {
 		armed = false;
 		thrustTarget = 0.0f;
 	}
-	
-	// 按钮6：STAB模式
-	if (webRCButtons & 0x0040) {
+
+	// 按钮6：STAB模式（上升沿）
+	if (risingEdge & 0x0040) {
 		mode = STAB;
 	}
-	
-	// 按钮7：ACRO模式
-	if (webRCButtons & 0x0080) {
+
+	// 按钮7：ACRO模式（上升沿）
+	if (risingEdge & 0x0080) {
 		mode = ACRO;
 	}
 	

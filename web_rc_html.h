@@ -20,24 +20,23 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 }
 /*======== 通用样式 ========*/
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}
-body{font-family:Arial,"Microsoft YaHei",sans-serif;background:linear-gradient(135deg,#0f2027 0%,#203a43 50%,#2c5364 100%);color:#fff;overflow:hidden;height:100vh;height:100dvh;width:100vw}
+body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c3c3c;color:#fff;overflow:hidden;height:100vh;height:100dvh;width:100vw}
 .container{width:100%;height:100%;display:flex;flex-direction:column;padding:var(--pad);gap:var(--gap);max-width:1200px;margin:0 auto;overflow:hidden}
 
 /*======== 顶部状态栏 ========*/
 .header {
   text-align: center;
   padding: 6px 10px;
-  background: rgba(0,0,0,.5);
+  background: rgba(30,30,30,.9);
   border-radius: 12px;
-  border: 2px solid rgba(76,201,240,.4);
+  border: 2px solid rgba(150,150,150,.3);
   box-shadow: 0 4px 16px rgba(0,0,0,.4);
   backdrop-filter: blur(10px)
 }
 
 .header h1 {
   font-size: 1.1rem;
-  color: #4cc9f0;
-  text-shadow: 0 0 10px rgba(76,201,240,.8);
+  color: #ffffff;
   margin-bottom: 4px;
 }
 
@@ -78,45 +77,27 @@ body{font-family:Arial,"Microsoft YaHei",sans-serif;background:linear-gradient(1
 
 /*======== 内容区 ========*/
 .content{display:flex;flex:1;gap:var(--gap);overflow:hidden;min-height:0}
-.joystick-container{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,0,.4);border-radius:20px;padding:clamp(8px,1.5vmin,15px);border:2px solid rgba(67,97,238,.5);box-shadow:inset 0 0 30px rgba(0,0,0,.5)}
-.joystick-title{font-size:clamp(0.75rem,2.2vmin,1.1rem);color:#72efdd;text-shadow:0 0 10px rgba(114,239,221,.6)}
+.joystick-container{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,0,.4);border-radius:20px;padding:clamp(8px,1.5vmin,15px);border:2px solid rgba(255,255,255,0.15);box-shadow:inset 0 0 30px rgba(0,0,0,.5)}
+.joystick-title{font-size:clamp(0.75rem,2.2vmin,1.1rem);color:#cccccc}
 .joystick-wrapper{width:100%;height:var(--js-size);display:flex;justify-content:center;align-items:center;position:relative;margin-top:clamp(4px,2vh,20px);}
-.joystick{width:var(--js-size);height:var(--js-size);background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.15),rgba(0,0,0,.3));border-radius:50%;position:relative;border:3px solid #4361ee;box-shadow:inset 0 0 25px rgba(67,97,238,.5),0 8px 25px rgba(0,0,0,.5);overflow:hidden}
-.joystick::before{content:'';position:absolute;top:50%;left:50%;width:2px;height:100%;background:linear-gradient(to bottom,transparent,rgba(255,255,255,.2),transparent);transform:translate(-50%,-50%)}
-.joystick::after{content:'';position:absolute;top:50%;left:50%;width:100%;height:2px;background:linear-gradient(to right,transparent,rgba(255,255,255,.2),transparent);transform:translate(-50%,-50%)}
-.joystick-knob{width:var(--knob-size);height:var(--knob-size);background:radial-gradient(circle at 30% 30%,#fff,#b8c6ff);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 4px 15px rgba(0,0,0,.5),inset 0 0 10px rgba(255,255,255,.7);cursor:move;transition:transform .1s ease-out;z-index:10}
-.coordinates{margin-top:clamp(4px,1vh,12px);text-align:center;font-family:'Courier New',monospace;font-size:clamp(0.65rem,1.8vmin,0.9rem);color:#a9def9;display:flex;flex-direction:column;gap:3px}
+.joystick{width:var(--js-size);height:var(--js-size);background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.1),rgba(0,0,0,.3));border-radius:50%;position:relative;border:2px solid rgba(255,255,255,0.2);box-shadow:inset 0 0 20px rgba(0,0,0,.5),0 8px 25px rgba(0,0,0,.5);overflow:hidden}
+.joystick::before{content:'';position:absolute;top:50%;left:50%;width:2px;height:100%;background:linear-gradient(to bottom,transparent,rgba(255,255,255,.15),transparent);transform:translate(-50%,-50%)}
+.joystick::after{content:'';position:absolute;top:50%;left:50%;width:100%;height:2px;background:linear-gradient(to right,transparent,rgba(255,255,255,.15),transparent);transform:translate(-50%,-50%)}
+.joystick-knob{width:var(--knob-size);height:var(--knob-size);background:radial-gradient(circle at 30% 30%,#fff,#cccccc);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.7);box-shadow:0 4px 15px rgba(0,0,0,.5),inset 0 0 10px rgba(255,255,255,.5);cursor:move;transition:transform .1s ease-out;z-index:10}
 
 /*======== 按钮区 ========*/
-.buttons-container{flex:.8;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(247,37,133,.4);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
-.buttons-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:8px;flex:1}
-.button{background:linear-gradient(145deg,#3a0ca3,#4361ee);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:bold;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:10px 5px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);box-shadow:0 3px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.2);position:relative}
-.button:hover{background:linear-gradient(145deg,#4361ee,#3a0ca3);transform:translateY(-1px)}
-.button.active{background:linear-gradient(145deg,#f72585,#b5179e);box-shadow:0 0 15px rgba(247,37,133,.6),inset 0 1px 0 rgba(255,255,255,.3);transform:scale(.95)}
+.buttons-container{flex:.8;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(150,150,150,.3);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
+.buttons-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:8px;flex:1}
+.button{background:linear-gradient(145deg,#484848,#383838);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:bold;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:10px 5px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);box-shadow:0 3px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
+.button:hover{background:linear-gradient(145deg,#565656,#464646);transform:translateY(-1px)}
+.button.active{background:linear-gradient(145deg,#1a73e8,#0d47a1);box-shadow:0 0 15px rgba(26,115,232,.6),inset 0 1px 0 rgba(255,255,255,.2);transform:scale(.95)}
 .button:active{transform:scale(.92)}
 .button-icon{font-size:1.1rem;margin-bottom:4px}
 
-/*======== 参数面板 ========*/
-.params-toggle-bar{display:flex;justify-content:center;flex-shrink:0}
-.params-toggle-btn{background:rgba(67,97,238,0.35);border:1px solid rgba(67,97,238,0.8);border-radius:8px;color:#a9def9;padding:5px 28px;font-size:0.78rem;cursor:pointer;transition:all .2s;touch-action:auto}
-.params-toggle-btn.open{background:rgba(247,37,133,0.25);border-color:rgba(247,37,133,0.7);color:#faa}
-.params-panel{max-height:0;transition:max-height 0.35s ease;flex-shrink:0;overflow:hidden}
-.params-panel.open{max-height:min(280px,45vh);overflow-y:auto;-webkit-overflow-scrolling:touch}
-.params-inner{background:rgba(0,0,0,.5);border-radius:12px;border:1px solid rgba(67,97,238,.3);padding:10px 14px}
-.params-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px}
-
-/*======== 控制滑块 ========*/
-.slider-group{display:flex;flex-direction:column;gap:3px}
-.slider-label{color:#a9def9;font-size:.72rem;display:flex;justify-content:space-between}
-.slider-label span{color:#4cc9f0;font-weight:bold}
-input[type=range]{touch-action:pan-x}
-.slider{width:100%;height:6px;-webkit-appearance:none;background:linear-gradient(to right,#3a0ca3,#4361ee);border-radius:3px;outline:none}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;cursor:pointer;border:2px solid #4361ee;box-shadow:0 0 8px rgba(67,97,238,.8)}
-
-/*======== 协议选择器 =========*/
-.protocol-selector{display:flex;gap:8px;margin-top:8px;justify-content:center}
-.protocol-btn{background:rgba(67,97,238,0.3);border:1px solid rgba(67,97,238,0.6);border-radius:6px;color:#a9def9;padding:3px 10px;font-size:0.68rem;cursor:pointer;transition:all .2s;touch-action:auto}
-.protocol-btn.active{background:rgba(67,97,238,0.8);color:#fff;border-color:#4cc9f0;box-shadow:0 0 8px rgba(76,201,240,0.5)}
+/*======== 调试控制台 ========*/
+.console-panel{background:rgba(10,10,10,.95);border-radius:12px;border:1px solid rgba(100,100,100,.4);padding:10px;flex-shrink:0;max-height:min(200px,35vh);display:flex;flex-direction:column;gap:6px}
+.console-output{flex:1;overflow-y:auto;font-family:'Courier New',monospace;font-size:0.7rem;color:#00ff88;min-height:80px;max-height:130px;word-break:break-all;-webkit-overflow-scrolling:touch}
+.console-output div{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.03)}
 
 /*======== 动画 ========*/
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(67,97,238,.7)}70%{box-shadow:0 0 0 12px rgba(67,97,238,0)}100%{box-shadow:0 0 0 0 rgba(67,97,238,0)}}
@@ -138,7 +119,6 @@ input[type=range]{touch-action:pan-x}
   .buttons-container{grid-column:1/3;grid-row:1}
   .content>.joystick-container:first-child{grid-column:1;grid-row:2}
   .content>.joystick-container:last-child{grid-column:2;grid-row:2}
-  .params-grid{grid-template-columns:1fr}
   .header h1{font-size:clamp(0.85rem,3.5vw,1.1rem)}
   .status-bar{gap:6px}
   .status-item{font-size:clamp(0.6rem,2.5vw,0.7rem);padding:2px 5px}
@@ -148,7 +128,6 @@ input[type=range]{touch-action:pan-x}
 @media (max-height:420px) and (orientation:landscape){
   :root{--js-size:clamp(110px,min(33vw,34vh),190px);--knob-size:calc(var(--js-size)*0.25)}
   .joystick-title{font-size:0.72rem}
-  .coordinates{font-size:0.62rem}
   .header h1{font-size:0.82rem}
   .header{padding:3px 8px}
   .header h1{margin-bottom:2px}
@@ -156,7 +135,6 @@ input[type=range]{touch-action:pan-x}
   .status-item{font-size:0.58rem;padding:2px 4px}
   .button{font-size:0.68rem;padding:5px 3px}
   .button-icon{font-size:0.88rem;margin-bottom:2px}
-  .params-grid{grid-template-columns:repeat(3,1fr)}
 }
 </style>
 </head>
@@ -171,6 +149,11 @@ input[type=range]{touch-action:pan-x}
       <div class="status-item"><span>📦</span><span id="packet-loss">0%</span></div>
       <div class="status-item"><span>🎮</span><span id="flight-mode">STAB</span></div>
       <div class="status-item"><span>⚡</span><span id="battery">-</span></div>
+      <div class="status-item" id="armed-status-item" style="background:rgba(255,51,51,0.15)"><span id="armed-status" style="color:#ff6666">已上锁</span></div>
+      <div class="status-item"><span>油门:</span><span id="left-y">0</span><span>%</span></div>
+      <div class="status-item"><span>偏航:</span><span id="left-x">0</span></div>
+      <div class="status-item"><span>横滚:</span><span id="right-x">0</span></div>
+      <div class="status-item"><span>俯仰:</span><span id="right-y">0</span></div>
     </div>
   </div>
 
@@ -178,10 +161,6 @@ input[type=range]{touch-action:pan-x}
     <!-- 左摇杆 -->
     <div class="joystick-container">
       <div class="joystick-title">左摇杆 (油门/偏航)</div>
-      <div class="coordinates">
-        <div>油门: <span id="left-y">0</span></div>
-        <div>偏航: <span id="left-x">0</span></div>
-      </div>
       <div class="joystick-wrapper">
         <div class="joystick" id="joystick-left"><div class="joystick-knob" id="knob-left"></div></div>
       </div>
@@ -195,50 +174,19 @@ input[type=range]{touch-action:pan-x}
     <!-- 右摇杆 -->
     <div class="joystick-container">
       <div class="joystick-title">右摇杆 (俯仰/横滚)</div>
-      <div class="coordinates">
-        <div>俯仰: <span id="right-y">0</span></div>
-        <div>横滚: <span id="right-x">0</span></div>
-      </div>
       <div class="joystick-wrapper">
         <div class="joystick" id="joystick-right"><div class="joystick-knob" id="knob-right"></div></div>
       </div>
     </div>
   </div>
 
-  <!-- 参数折叠面板 -->
-  <div class="params-panel" id="params-panel">
-    <div class="params-inner">
-      <div class="params-grid">
-        <div class="slider-group">
-          <div class="slider-label">油门功率限制 <span id="throttle-sens-value">100</span>%</div>
-          <input type="range" class="slider" id="throttle-sensitivity" min="60" max="100" value="100">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">摇杆死区 <span id="deadzone-value">3</span>%</div>
-          <input type="range" class="slider" id="deadzone-slider" min="0" max="10" value="3">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">姿态灵敏度 <span id="stick-sens-value">85</span>%</div>
-          <input type="range" class="slider" id="stick-sensitivity" min="30" max="100" value="85">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">中心柔和度 <span id="expo-value">25</span>%</div>
-          <input type="range" class="slider" id="expo-slider" min="0" max="60" value="25">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">最大倾斜角 <span id="tilt-value">30</span>°</div>
-          <input type="range" class="slider" id="tilt-slider" min="10" max="45" value="30">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">操控平滑度 <span id="smooth-value">40</span>%</div>
-          <input type="range" class="slider" id="smooth-slider" min="10" max="80" value="40">
-        </div>
-      </div>
-      <div class="protocol-selector">
-        <button class="protocol-btn active" onclick="setProtocol('json')">JSON</button>
-        <button class="protocol-btn" onclick="setProtocol('binary')">二进制</button>
-        <button class="protocol-btn" onclick="setProtocol('delta')">增量</button>
-      </div>
+  <!-- 调试控制台面板（默认隐藏，点击调试按钮打开） -->
+  <div id="console-panel" class="console-panel" style="display:none">
+    <div id="console-output" class="console-output"></div>
+    <div style="display:flex;gap:6px;touch-action:auto">
+      <input id="console-input" placeholder="输入命令 (arm/disarm/status)..."
+        style="flex:1;background:rgba(0,0,0,.6);border:1px solid rgba(100,100,100,.5);border-radius:6px;color:#0f8;padding:4px 8px;font-size:0.7rem;font-family:'Courier New',monospace;touch-action:auto">
+      <button onclick="sendConsoleCmd()" style="background:#1a73e8;border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:0.7rem;cursor:pointer;touch-action:auto">发送</button>
     </div>
   </div>
 </div>
@@ -250,52 +198,42 @@ let connectionOk = false;
 let packetStats = { sent: 0, lost: 0 };
 let latencyHistory = new Array(10).fill(0);
 let latencyIndex = 0;
-let lastSendTime = 0;
-const SEND_INTERVAL = 100; // P1优化: ~10Hz (100ms 高延迟模式，原60Hz)
+const SEND_INTERVAL = 100; // ~10Hz
 
 const touches = new Map();
-let leftStick = {x:0, y:0, rawX:0, rawY:0};
+let leftStick  = {x:0, y:0, rawX:0, rawY:0};
 let rightStick = {x:0, y:0, rawX:0, rawY:0};
 
-let lastSentValues = { throttle: 0, roll: 0, pitch: 0, yaw: 0 };
-let currentValues = { throttle: 0, roll: 0, pitch: 0, yaw: 0 };
+let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
+let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 const MIN_CHANGE_THRESHOLD = 0.5;
 
-let currentProtocol = 'json';
-let useBinaryProtocol = false;
-let useDeltaProtocol = false;
+// 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
+const DEADZONE = 3;   // 死区 3%
+const EXPO    = 40;   // 指数曲线 40%
 
-let deadzone = 3;
-let expo = 25;
-let stickSensitivity = 85;
-let throttleSensitivity = 80;
-let smoothing = 40;
-let tiltMax = 30;
+let consecutiveFails = 0; // 连续失败计数，>=3 才判定断连
 
-let buttonStates = new Array(16).fill(false);
+let buttonStates     = new Array(16).fill(false);
 let lastButtonStates = new Array(16).fill(false);
 
-/*======================== 按钮配置（3×3 九宫格）========================*/
-// 排列：第一行:解锁/上锁/急停  第二行:起飞/降落/蜂鸣  第三行:灯光/摇杆校准/调参
+let consolePollingTimer = null;
+
+/*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
   {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机"},
   {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机"},
-  {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止电机"},
-  {icon:"🚀",label:"起飞",   color:"#ff9900",desc:"自动起飞"},
-  {icon:"🛬",label:"降落",   color:"#ff6600",desc:"自动降落"},
-  {icon:"🔊",label:"蜂鸣",   color:"#ff9900",desc:"蜂鸣器定位"},
-  {icon:"�",label:"模式",   color:"#00cfff",desc:"ACRO↔STAB模式切换"},
-  {icon:"🎯",label:"摇杆校准",color:"#7209b7",desc:"重置摇杆零点"},
-  {icon:"⚙️",label:"调参",   color:"#4cc9f0",desc:"展开参数设置"}
+  {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止"},
+  {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"ACRO↔STAB切换"},
+  {icon:"🎯",label:"摇杆校准",   color:"#7209b7",desc:"摇杆中心校准"},
+  {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
 ];
 
 /*======================== 初始化 ========================*/
 function init() {
   initButtons();
-  initControls();
   initNetwork();
   initPointerEvents();
-  loadSettings();
   requestAnimationFrame(animationLoop);
 }
 
@@ -308,155 +246,76 @@ function initButtons() {
     btn.id = `btn-${idx}`;
     btn.title = cfg.desc;
     btn.innerHTML = `<div class="button-icon">${cfg.icon}</div><div>${cfg.label}</div>`;
-    btn.style.background = `linear-gradient(145deg, ${cfg.color}44, ${cfg.color}88)`;
-    btn.style.border = `2px solid ${cfg.color}`;
-    
+    btn.style.border = `2px solid ${cfg.color}55`;
     btn.addEventListener('pointerdown', e => {
       e.preventDefault();
       handleButton(idx);
       if (navigator.vibrate) navigator.vibrate(20);
     });
-    
     container.appendChild(btn);
-  });
-}
-
-function initControls() {
-  const sliders = [
-    'deadzone-slider', 'expo-slider', 'stick-sensitivity',
-    'throttle-sensitivity', 'smooth-slider', 'tilt-slider'
-  ];
-  
-  sliders.forEach(id => {
-    const slider = document.getElementById(id);
-    if (slider) {
-      slider.addEventListener('input', updateControlParams);
-    }
   });
 }
 
 function initNetwork() {
   updateConnectionStatus(true);
-  setInterval(updateNetworkStatus, 1000);
+  setInterval(updateNetworkStatus, 2000);
 }
 
 function initPointerEvents() {
-  const joysticks = [
-    { id: 'joystick-left', side: 'left' },
-    { id: 'joystick-right', side: 'right' }
-  ];
-  
-  joysticks.forEach(js => {
-    const element = document.getElementById(js.id);
-    
-    element.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      handlePointerStart(e, js.side);
-      element.setPointerCapture(e.pointerId);
-    });
-    
-    element.addEventListener('pointermove', e => {
-      e.preventDefault();
-      handlePointerMove(e, js.side);
-    });
-    
-    element.addEventListener('pointerup', e => {
-      e.preventDefault();
-      handlePointerEnd(e, js.side);
-    });
-    
-    element.addEventListener('pointercancel', e => {
-      e.preventDefault();
-      handlePointerEnd(e, js.side);
-    });
-    
-    element.addEventListener('touchstart', e => e.preventDefault());
-    element.addEventListener('touchmove', e => e.preventDefault());
+  [{ id:'joystick-left', side:'left' }, { id:'joystick-right', side:'right' }].forEach(js => {
+    const el = document.getElementById(js.id);
+    el.addEventListener('pointerdown', e => { e.preventDefault(); handlePointerStart(e, js.side); el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove', e => { e.preventDefault(); handlePointerMove(e, js.side); });
+    el.addEventListener('pointerup',   e => { e.preventDefault(); handlePointerEnd(e, js.side); });
+    el.addEventListener('pointercancel', e => { e.preventDefault(); handlePointerEnd(e, js.side); });
+    el.addEventListener('touchstart', e => e.preventDefault());
+    el.addEventListener('touchmove',  e => e.preventDefault());
   });
 }
 
 /*======================== 动画循环 ========================*/
 function animationLoop(timestamp) {
-  const deltaTime = timestamp - lastAnimationTime;
-  
-  if (deltaTime >= SEND_INTERVAL) {
+  if (timestamp - lastAnimationTime >= SEND_INTERVAL) {
     processJoystickInput();
     checkAndSendChanges();
     updateDisplayAll();
     lastAnimationTime = timestamp;
   }
-  
   requestAnimationFrame(animationLoop);
-}
-
-/*======================== 控制参数更新 ========================*/
-function updateControlParams() {
-  deadzone = parseInt(document.getElementById('deadzone-slider').value);
-  expo = parseInt(document.getElementById('expo-slider').value);
-  stickSensitivity = parseInt(document.getElementById('stick-sensitivity').value);
-  throttleSensitivity = parseInt(document.getElementById('throttle-sensitivity').value);
-  smoothing = parseInt(document.getElementById('smooth-slider').value);
-  tiltMax = parseInt(document.getElementById('tilt-slider').value);
-  
-  document.getElementById('deadzone-value').textContent = deadzone;
-  document.getElementById('expo-value').textContent = expo;
-  document.getElementById('stick-sens-value').textContent = stickSensitivity;
-  document.getElementById('throttle-sens-value').textContent = throttleSensitivity;
-  document.getElementById('smooth-value').textContent = smoothing;
-  document.getElementById('tilt-value').textContent = tiltMax;
-  
-  sendParamsUpdate();
-  saveSettings();
 }
 
 /*======================== 摇杆曲线处理 ========================*/
 function applyCurve(value) {
   const absVal = Math.abs(value);
-  if (absVal < deadzone / 100) return 0;
-  
-  const normalized = (absVal - deadzone / 100) / (1 - deadzone / 100);
-  const sign = value >= 0 ? 1 : -1;
-  const expoFactor = expo / 100;
-  
-  // 仅应用指数曲线，不在前端做灵敏度缩放（后端通过 webRCStickScale 单次应用）
+  if (absVal < DEADZONE / 100) return 0;
+  const normalized = (absVal - DEADZONE / 100) / (1 - DEADZONE / 100);
+  const expoFactor = EXPO / 100;
   let curved = normalized * (1 - expoFactor) + Math.pow(normalized, 3) * expoFactor;
-  
-  return curved * sign;
-}
-
-function applyThrottleCurve(value) {
-  // 线性直通：直接发送原始油门值(0~100)，功率限制在后端应用
-  return value;
+  return curved * (value >= 0 ? 1 : -1);
 }
 
 /*======================== 摇杆数据处理 ========================*/
 function processJoystickInput() {
-  let throttleRaw = (leftStick.rawY + 100) / 2;
-  currentValues.throttle = applyThrottleCurve(throttleRaw);
-  currentValues.yaw = applyCurve(leftStick.rawX);
+  const throttleRaw = (leftStick.rawY + 100) / 2;
+  currentValues.throttle = throttleRaw; // 线性，后端限幅
+  currentValues.yaw   = applyCurve(leftStick.rawX);
   currentValues.pitch = applyCurve(rightStick.rawY);
-  currentValues.roll = applyCurve(rightStick.rawX);
-  
-  leftStick.x = applyCurve(leftStick.rawX);
-  leftStick.y = throttleRaw - 50;
+  currentValues.roll  = applyCurve(rightStick.rawX);
+  leftStick.x  = applyCurve(leftStick.rawX);
+  leftStick.y  = throttleRaw - 50;
   rightStick.x = applyCurve(rightStick.rawX);
   rightStick.y = applyCurve(rightStick.rawY);
 }
 
-function hasSignificantChange(newValues) {
-  return (
-    Math.abs(newValues.throttle - lastSentValues.throttle) > MIN_CHANGE_THRESHOLD ||
-    Math.abs(newValues.roll - lastSentValues.roll) > MIN_CHANGE_THRESHOLD ||
-    Math.abs(newValues.pitch - lastSentValues.pitch) > MIN_CHANGE_THRESHOLD ||
-    Math.abs(newValues.yaw - lastSentValues.yaw) > MIN_CHANGE_THRESHOLD
-  );
+function hasSignificantChange(nv) {
+  return Math.abs(nv.throttle - lastSentValues.throttle) > MIN_CHANGE_THRESHOLD ||
+         Math.abs(nv.roll     - lastSentValues.roll)     > MIN_CHANGE_THRESHOLD ||
+         Math.abs(nv.pitch    - lastSentValues.pitch)    > MIN_CHANGE_THRESHOLD ||
+         Math.abs(nv.yaw      - lastSentValues.yaw)      > MIN_CHANGE_THRESHOLD;
 }
 
 function checkAndSendChanges() {
-  if (hasSignificantChange(currentValues)) {
-    sendJoystickData();
-  }
-  
+  if (hasSignificantChange(currentValues)) sendJoystickData();
   for (let i = 0; i < buttonStates.length; i++) {
     if (buttonStates[i] !== lastButtonStates[i]) {
       sendButtonData(i, buttonStates[i]);
@@ -467,391 +326,205 @@ function checkAndSendChanges() {
 
 /*======================== 数据发送函数 ========================*/
 function sendJoystickData() {
-  const data = {
-    t: 1,
-    th: Math.round(currentValues.throttle),
-    r: Math.round(currentValues.roll),
-    p: Math.round(currentValues.pitch),
-    y: Math.round(currentValues.yaw),
-    ts: performance.now(),
-    dz: deadzone,
-    ex: expo,
-    ss: stickSensitivity
-  };
-  
-  sendToESP('/web_rc', data);
+  sendToESP('/web_rc', { t:1, th:Math.round(currentValues.throttle), r:Math.round(currentValues.roll),
+    p:Math.round(currentValues.pitch), y:Math.round(currentValues.yaw), ts:performance.now() });
   lastSentValues = {...currentValues};
   packetStats.sent++;
 }
 
 function sendButtonData(buttonIndex, state) {
-  const data = {
-    t: 2,
-    b: buttonIndex,
-    s: state ? 1 : 0,
-    ts: performance.now()
-  };
-  
-  // P1优化: 关键按鈕（解锁/上锁/急停）重传3次提高可靠性
-  const criticalButtons = [0, 1, 2]; // 解锁、上锁、急停
-  const retries = criticalButtons.includes(buttonIndex) ? 3 : 1;
-  
-  for (let i = 0; i < retries; i++) {
-    setTimeout(() => {
-      sendToESP('/web_rc', data);
-    }, i * 50);  // 间隔50ms发送，避免冲突
-  }
-  
-  if (navigator.vibrate) {
-    navigator.vibrate(20);
-  }
-}
-
-function sendParamsUpdate() {
-  const data = {
-    t: 5,
-    ths: throttleSensitivity,
-    sss: stickSensitivity,
-    ys: stickSensitivity * 0.8,
-    ts: performance.now()
-  };
-  
-  sendToESP('/web_rc', data);
+  sendToESP('/web_rc', { t:2, b:buttonIndex, s:state ? 1 : 0, ts:performance.now() });
 }
 
 /*======================== 显示更新 ========================*/
 function updateDisplayAll() {
-  document.getElementById('left-x').textContent = Math.round(leftStick.x);
-  document.getElementById('left-y').textContent = Math.round(currentValues.throttle) + '%';
+  document.getElementById('left-y').textContent  = Math.round(currentValues.throttle);
+  document.getElementById('left-x').textContent  = Math.round(leftStick.x);
   document.getElementById('right-x').textContent = Math.round(rightStick.x);
   document.getElementById('right-y').textContent = Math.round(rightStick.y);
 }
 
-/*======================== Pointer Events处理 ========================*/
+/*======================== Pointer Events 处理 ========================*/
 function handlePointerStart(e, side) {
-  e.preventDefault();
   touches.set(e.pointerId, side);
   document.getElementById(`joystick-${side}`).classList.add('active');
   updateJoystickPosition(side, e.clientX, e.clientY);
 }
 
 function handlePointerMove(e, side) {
-  e.preventDefault();
-  if (touches.get(e.pointerId) === side) {
-    updateJoystickPosition(side, e.clientX, e.clientY);
-  }
+  if (touches.get(e.pointerId) === side) updateJoystickPosition(side, e.clientX, e.clientY);
 }
 
 function handlePointerEnd(e, side) {
-  e.preventDefault();
-  if (touches.get(e.pointerId) === side) {
-    touches.delete(e.pointerId);
-    const joystick = document.getElementById(`joystick-${side}`);
-    const knob = document.getElementById(`knob-${side}`);
-    
-    joystick.classList.remove('active');
-    knob.style.transition = 'transform 0.2s ease-out';
-    knob.style.transform = 'translate(-50%, -50%)';
-    
-    setTimeout(() => {
-      knob.style.transition = '';
-    }, 200);
-    
-    if (side === 'left') {
-      leftStick = {x:0, y:0, rawX:0, rawY:0};
-    } else {
-      rightStick = {x:0, y:0, rawX:0, rawY:0};
-    }
-    
-    processJoystickInput();
-    sendJoystickData();
-  }
+  if (touches.get(e.pointerId) !== side) return;
+  touches.delete(e.pointerId);
+  const knob = document.getElementById(`knob-${side}`);
+  document.getElementById(`joystick-${side}`).classList.remove('active');
+  knob.style.transition = 'transform 0.2s ease-out';
+  knob.style.transform  = 'translate(-50%, -50%)';
+  setTimeout(() => { knob.style.transition = ''; }, 200);
+  if (side === 'left')  leftStick  = {x:0, y:0, rawX:0, rawY:0};
+  else                  rightStick = {x:0, y:0, rawX:0, rawY:0};
+  processJoystickInput();
+  sendJoystickData();
 }
 
 function updateJoystickPosition(side, clientX, clientY) {
   const joystick = document.getElementById(`joystick-${side}`);
-  const knob = document.getElementById(`knob-${side}`);
-  const rect = joystick.getBoundingClientRect();
-  
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const radius = centerX - 30;
-  
-  let deltaX = (clientX - rect.left) - centerX;
-  let deltaY = (clientY - rect.top) - centerY;
-  
-  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-  if (distance > radius) {
-    deltaX = (deltaX / distance) * radius;
-    deltaY = (deltaY / distance) * radius;
-  }
-  
-  knob.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
-  
-  const normX = (deltaX / radius) * 100;
-  const normY = -(deltaY / radius) * 100;
-  
-  if (side === 'left') {
-    leftStick.rawX = normX;
-    leftStick.rawY = normY;
-  } else {
-    rightStick.rawX = normX;
-    rightStick.rawY = normY;
-  }
+  const knob     = document.getElementById(`knob-${side}`);
+  const rect     = joystick.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const radius = cx - 30;
+  let dx = (clientX - rect.left) - cx;
+  let dy = (clientY - rect.top)  - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist > radius) { dx = dx/dist*radius; dy = dy/dist*radius; }
+  knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  if (side === 'left')  { leftStick.rawX  =  dx/radius*100; leftStick.rawY  = -dy/radius*100; }
+  else                  { rightStick.rawX =  dx/radius*100; rightStick.rawY = -dy/radius*100; }
 }
 
 /*======================== 网络处理 ========================*/
 function sendToESP(url, data) {
-  const startTime = performance.now();
-  
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  .then(response => {
-    if (response.ok) {
-      const latency = performance.now() - startTime;
-      updateLatency(latency);
-      return response.json();
-    }
-    throw new Error('Network response was not ok');
-  })
-  .then(responseData => {
-    updateConnectionStatus(true);
-    // 更新飞行模式和解锁状态显示
-    if (responseData.m !== undefined) {
-      const modeNames = ['RAW', 'ACRO', 'STAB', 'AUTO'];
-      const modeName = modeNames[responseData.m] || 'STAB';
-      document.getElementById('flight-mode').textContent = modeName;
-    }
-  })
-  .catch(error => {
-    packetStats.lost++;
-    updateConnectionStatus(false);
-  });
+  const t0 = performance.now();
+  fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+    .then(r => { if (!r.ok) throw new Error(); updateLatency(performance.now() - t0); return r.json(); })
+    .then(resp => {
+      consecutiveFails = 0;
+      updateConnectionStatus(true);
+      if (resp.m !== undefined) {
+        const names = ['RAW','ACRO','STAB','AUTO'];
+        document.getElementById('flight-mode').textContent = names[resp.m] || 'STAB';
+      }
+      if (resp.arm !== undefined) {
+        const el   = document.getElementById('armed-status');
+        const item = document.getElementById('armed-status-item');
+        el.textContent = resp.arm ? '已解锁' : '已上锁';
+        item.style.background = resp.arm ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,51,0.15)';
+        el.style.color = resp.arm ? '#00ff88' : '#ff6666';
+      }
+    })
+    .catch(() => {
+      if (++consecutiveFails >= 3) updateConnectionStatus(false);
+    });
 }
 
 function updateLatency(latency) {
   latencyHistory[latencyIndex] = latency;
   latencyIndex = (latencyIndex + 1) % latencyHistory.length;
-  
-  const avgLatency = latencyHistory.reduce((a, b) => a + b) / latencyHistory.length;
-  document.getElementById('latency').textContent = Math.round(avgLatency) + 'ms';
-  
-  const latencyDot = document.querySelector('.status-dot');
-  if (avgLatency > 200) {
-    latencyDot.className = 'status-dot warning';
-  } else if (avgLatency > 100) {
-    latencyDot.className = 'status-dot warning';
-  } else {
-    latencyDot.className = 'status-dot connected';
-  }
+  const avg = latencyHistory.reduce((a,b)=>a+b) / latencyHistory.length;
+  document.getElementById('latency').textContent = Math.round(avg) + 'ms';
+  const dot = document.querySelector('.status-dot');
+  dot.className = avg > 200 ? 'status-dot warning' : avg > 100 ? 'status-dot warning' : 'status-dot connected';
 }
 
 function updateNetworkStatus() {
-  const lossRate = packetStats.sent > 0 ? 
-    (packetStats.lost / packetStats.sent * 100).toFixed(1) : '0';
-  document.getElementById('packet-loss').textContent = lossRate + '%';
-  
-  fetch('/web_rc/status')
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById('battery').textContent = data.battery + '%';
-    })
-    .catch(() => {
-      document.getElementById('battery').textContent = '-';
-    });
+  const lr = packetStats.sent > 0 ? (packetStats.lost/packetStats.sent*100).toFixed(1) : '0';
+  document.getElementById('packet-loss').textContent = lr + '%';
+  fetch('/web_rc/status').then(r=>r.json()).then(d => {
+    document.getElementById('battery').textContent = d.voltage ? d.voltage + 'V' : '-';
+  }).catch(()=>{ document.getElementById('battery').textContent = '-'; });
 }
 
 function updateConnectionStatus(connected) {
   connectionOk = connected;
-  const dot = document.getElementById('status-dot');
+  const dot  = document.getElementById('status-dot');
   const text = document.getElementById('connection-text');
-  
-  if (connected) {
-    dot.className = 'status-dot connected';
-    text.textContent = '已连接';
-    text.style.color = '#0f8';
-  } else {
-    dot.className = 'status-dot disconnected';
-    text.textContent = '连接断开';
-    text.style.color = '#f33';
-  }
-}
-
-/*======================== 协议设置 ========================*/
-function setProtocol(protocol) {
-  currentProtocol = protocol;
-  useBinaryProtocol = (protocol === 'binary');
-  useDeltaProtocol = (protocol === 'delta');
-
-  const btns = document.querySelectorAll('.protocol-btn');
-  btns.forEach(btn => btn.classList.remove('active'));
-  const pidx = ['json','binary','delta'].indexOf(protocol);
-  if (pidx >= 0 && btns[pidx]) btns[pidx].classList.add('active');
-
-  localStorage.setItem('flix_rc_protocol', protocol);
+  if (connected) { dot.className='status-dot connected'; text.textContent='已连接'; text.style.color='#0f8'; }
+  else           { dot.className='status-dot disconnected'; text.textContent='连接断开'; text.style.color='#f33'; }
 }
 
 /*======================== 按钮处理 ========================*/
 function handleButton(idx) {
-  // 摇杆校准：直接执行，不切换状态
-  if (idx === 7) {
-    calibrateCenter();
-    return;
-  }
-  // 调参按钮：展开/收起参数面板
-  if (idx === 8) {
-    toggleParams();
-    return;
-  }
-
-  // 起飞/降落/蜂鸣：功能暂未实现，弹出提示
-  if (idx === 3 || idx === 4 || idx === 5) {
-    const names = ['起飞', '降落', '蜂鸣定位'];
-    showToast('🚧 ' + names[idx - 3] + ' 功能暂未实现');
-    return;
-  }
-
-  // 模式切换（ACRO↔STAB）
-  if (idx === 6) {
-    const currentMode = document.getElementById('flight-mode').textContent;
-    const targetBit = (currentMode === 'STAB') ? 7 : 6;  // STAB时切到ACRO(bit7), 其他时切到STAB(bit6)
-    sendButtonData(targetBit, 1);
-    setTimeout(() => sendButtonData(targetBit, 0), 100);
+  if (idx === 4) { calibrateCenter(); return; }
+  if (idx === 5) { toggleConsole(); return; }
+  if (idx === 3) {
+    const mode = document.getElementById('flight-mode').textContent;
+    const bit  = (mode === 'STAB') ? 7 : 6;
+    sendButtonData(bit, 1);
+    setTimeout(() => sendButtonData(bit, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-
-  // 解锁：检查油门是否过高
-  if (idx === 0 && !buttonStates[0]) {
-    if (currentValues.throttle > 30) {
+  // 解锁/上锁/急停：脉冲模式，后端用上升沿检测
+  if (idx === 0 || idx === 1 || idx === 2) {
+    if (idx === 0 && currentValues.throttle > 30) {
       showToast('⚠️ 油门过高，无法解锁！请将油门降至30%以下');
       return;
     }
-  }
-
-  buttonStates[idx] = !buttonStates[idx];
-  const btn = document.getElementById(`btn-${idx}`);
-  
-  if (buttonStates[idx]) {
-    btn.classList.add('active');
-    btn.style.transform = 'scale(0.95)';
-  } else {
-    btn.classList.remove('active');
-    btn.style.transform = '';
-  }
-  
-  sendButtonData(idx, buttonStates[idx]);
-  
-  if (navigator.vibrate) {
-    navigator.vibrate(20);
+    sendButtonData(idx, 1);
+    setTimeout(() => sendButtonData(idx, 0), 100);
+    if (navigator.vibrate) navigator.vibrate(30);
   }
 }
 
-/*======================== Toast提示 ========================*/
+/*======================== Toast 提示 ========================*/
 function showToast(msg) {
-  let toast = document.getElementById('toast-msg');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'toast-msg';
-    toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);' +
-      'background:rgba(0,0,0,0.85);color:#fff;padding:12px 20px;border-radius:10px;' +
-      'font-size:14px;z-index:9999;pointer-events:none;text-align:center;max-width:80vw;' +
-      'border:1px solid rgba(255,255,255,0.2);transition:opacity 0.3s;';
-    document.body.appendChild(toast);
+  let t = document.getElementById('toast-msg');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast-msg';
+    t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:9999;pointer-events:none;text-align:center;max-width:80vw;border:1px solid rgba(255,255,255,.2);transition:opacity .3s';
+    document.body.appendChild(t);
   }
-  toast.textContent = msg;
-  toast.style.opacity = '1';
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
 }
 
-/*======================== 校准功能 ========================*/
+/*======================== 摇杆校准 ========================*/
 function calibrateCenter() {
   if (confirm('请确保摇杆在中心位置，然后点击确定进行校准')) {
-    leftStick = {x:0, y:0, rawX:0, rawY:0};
-    rightStick = {x:0, y:0, rawX:0, rawY:0};
-    currentValues = { throttle: 0, roll: 0, pitch: 0, yaw: 0 };
-    lastSentValues = { throttle: 0, roll: 0, pitch: 0, yaw: 0 };
-    
-    sendToESP('/web_rc', {
-      t: 3,
-      ts: performance.now()
-    });
-    
+    leftStick = rightStick = {x:0,y:0,rawX:0,rawY:0};
+    currentValues = lastSentValues = {throttle:0,roll:0,pitch:0,yaw:0};
+    sendToESP('/web_rc', {t:3, ts:performance.now()});
     alert('校准完成！');
   }
 }
 
-/*======================== 设置保存/加载 ========================*/
-function saveSettings() {
-  const settings = {
-    deadzone: deadzone,
-    expo: expo,
-    stickSensitivity: stickSensitivity,
-    throttleSensitivity: throttleSensitivity,
-    smoothing: smoothing,
-    tiltMax: tiltMax,
-    protocol: currentProtocol
-  };
-  
-  localStorage.setItem('flix_rc_settings', JSON.stringify(settings));
+/*======================== 调试控制台 ========================*/
+function toggleConsole() {
+  const panel = document.getElementById('console-panel');
+  const btn   = document.getElementById('btn-5');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'flex' : 'none';
+  if (open) { panel.style.flexDirection = 'column'; }
+  if (btn) { open ? btn.classList.add('active') : btn.classList.remove('active'); }
+  if (open) {
+    consolePollingTimer = setInterval(fetchConsoleLogs, 2000);
+    fetchConsoleLogs();
+  } else {
+    clearInterval(consolePollingTimer);
+    consolePollingTimer = null;
+  }
 }
 
-function loadSettings() {
-  const saved = localStorage.getItem('flix_rc_settings');
-  if (saved) {
-    try {
-      const settings = JSON.parse(saved);
-      deadzone = settings.deadzone || 3;
-      expo = settings.expo || 25;
-      stickSensitivity = settings.stickSensitivity || 85;
-      throttleSensitivity = settings.throttleSensitivity || 80;
-      smoothing = settings.smoothing || 40;
-      tiltMax = settings.tiltMax || 30;
-      currentProtocol = settings.protocol || 'json';
-      
-      document.getElementById('deadzone-slider').value = deadzone;
-      document.getElementById('expo-slider').value = expo;
-      document.getElementById('stick-sensitivity').value = stickSensitivity;
-      document.getElementById('throttle-sensitivity').value = throttleSensitivity;
-      document.getElementById('smooth-slider').value = smoothing;
-      document.getElementById('tilt-slider').value = tiltMax;
-      
-      setProtocol(currentProtocol);
-      updateControlParams();
-    } catch (e) {
-      console.error('Failed to load settings:', e);
+function fetchConsoleLogs() {
+  fetch('/console').then(r=>r.json()).then(data => {
+    const out = document.getElementById('console-output');
+    if (data.lines && data.lines.length > 0) {
+      out.innerHTML = data.lines.map(l=>`<div>${l.replace(/</g,'&lt;')}</div>`).join('');
+      out.scrollTop = out.scrollHeight;
     }
-  }
+  }).catch(()=>{});
 }
 
-/*======================== 参数面板折叠 ========================*/
-function toggleParams() {
-  const panel = document.getElementById('params-panel');
-  const isOpen = panel.classList.toggle('open');
-  // 同步调参按钮的 active 样式
-  const btn = document.getElementById('btn-8');
-  if (btn) {
-    if (isOpen) { btn.classList.add('active'); btn.style.transform = 'scale(0.95)'; }
-    else         { btn.classList.remove('active'); btn.style.transform = ''; }
-  }
+function sendConsoleCmd() {
+  const input = document.getElementById('console-input');
+  const cmd = input.value.trim();
+  if (!cmd) return;
+  fetch('/console/cmd', {method:'POST', headers:{'Content-Type':'text/plain'}, body:cmd})
+    .then(()=>{ input.value=''; fetchConsoleLogs(); }).catch(()=>{});
 }
 
-/*======================== 事件监听器 ========================*/
+/*======================== 事件绑定 ========================*/
 document.addEventListener('DOMContentLoaded', init);
 document.addEventListener('contextmenu', e => e.preventDefault());
 
+// 心跳：2000ms，连续3次失败才判定断连
 setInterval(() => {
-  if (connectionOk) {
-    sendToESP('/web_rc/heartbeat', {
-      t: 4,
-      ts: performance.now()
-    });
-  }
-}, 5000);  // P0修复: 3s→5s，配合后端10s超时阈值
+  if (connectionOk) sendToESP('/web_rc/heartbeat', {t:4, ts:performance.now()});
+}, 2000);
 </script>
 </body>
 </html>

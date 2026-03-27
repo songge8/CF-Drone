@@ -13,7 +13,7 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 <style>
 /*======== 响应式变量 ========*/
 :root{
-  --js-size:clamp(130px,min(36vw,38vh),240px);
+  --js-size:clamp(140px,min(42vw,44vh),300px);
   --knob-size:calc(var(--js-size)*0.25);
   --pad:clamp(6px,1.5vmin,15px);
   --gap:clamp(6px,1.5vmin,15px);
@@ -87,7 +87,9 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 按钮区 ========*/
 .buttons-container{flex:.8;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(150,150,150,.3);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
-.buttons-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:8px;flex:1}
+.buttons-grid{display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr);gap:8px;flex:1}
+.buttons-grid>button{grid-column:span 2}
+.buttons-grid>button:nth-child(4),.buttons-grid>button:nth-child(5){grid-column:span 3}
 .button{background:linear-gradient(145deg,#484848,#383838);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:bold;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:10px 5px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);box-shadow:0 3px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
 .button:hover{background:linear-gradient(145deg,#565656,#464646);transform:translateY(-1px)}
 .button.active{background:linear-gradient(145deg,#1a73e8,#0d47a1);box-shadow:0 0 15px rgba(26,115,232,.6),inset 0 1px 0 rgba(255,255,255,.2);transform:scale(.95)}
@@ -107,7 +109,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 竖屏自适应 ========*/
 @media (orientation:portrait){
-  :root{--js-size:clamp(130px,40vw,200px);--knob-size:calc(var(--js-size)*0.25)}
+  :root{--js-size:clamp(140px,44vw,260px);--knob-size:calc(var(--js-size)*0.25)}
   .content{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -126,7 +128,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 小屏横屏自适应（高度≤420px）========*/
 @media (max-height:420px) and (orientation:landscape){
-  :root{--js-size:clamp(110px,min(33vw,34vh),190px);--knob-size:calc(var(--js-size)*0.25)}
+  :root{--js-size:clamp(110px,min(38vw,40vh),220px);--knob-size:calc(var(--js-size)*0.25)}
   .joystick-title{font-size:0.72rem}
   .header h1{font-size:0.82rem}
   .header{padding:3px 8px}
@@ -145,11 +147,11 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
     <h1>无人机 WEB RC 遥控器</h1>
     <div class="status-bar">
       <div class="status-item"><span class="status-dot" id="status-dot"></span><span id="connection-text">连接中...</span></div>
-      <div class="status-item"><span>⏱️</span><span id="latency">-</span></div>
-      <div class="status-item"><span>📦</span><span id="packet-loss">0%</span></div>
-      <div class="status-item"><span>🎮</span><span id="flight-mode">STAB</span></div>
-      <div class="status-item"><span>⚡</span><span id="battery">-</span></div>
       <div class="status-item" id="armed-status-item" style="background:rgba(255,51,51,0.15)"><span id="armed-status" style="color:#ff6666">已上锁</span></div>
+      <div class="status-item"><span>遥控延迟</span><span id="latency">-</span></div>
+      <div class="status-item"><span>丢包率</span><span id="packet-loss">0%</span></div>
+      <div class="status-item"><span>飞行模式</span><span id="flight-mode">自稳</span></div>
+      <div class="status-item"><span>电池电压</span><span id="battery">-</span></div>
       <div class="status-item"><span>油门:</span><span id="left-y">0</span><span>%</span></div>
       <div class="status-item"><span>偏航:</span><span id="left-x">0</span></div>
       <div class="status-item"><span>横滚:</span><span id="right-x">0</span></div>
@@ -184,7 +186,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   <div id="console-panel" class="console-panel" style="display:none">
     <div id="console-output" class="console-output"></div>
     <div style="display:flex;gap:6px;touch-action:auto">
-      <input id="console-input" placeholder="输入命令 (arm/disarm/status)..."
+      <input id="console-input" placeholder="输入命令 (ps/imu/rc/arm/disarm/help)..."
         style="flex:1;background:rgba(0,0,0,.6);border:1px solid rgba(100,100,100,.5);border-radius:6px;color:#0f8;padding:4px 8px;font-size:0.7rem;font-family:'Courier New',monospace;touch-action:auto">
       <button onclick="sendConsoleCmd()" style="background:#1a73e8;border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:0.7rem;cursor:pointer;touch-action:auto">发送</button>
     </div>
@@ -201,7 +203,7 @@ let latencyIndex = 0;
 const SEND_INTERVAL = 100; // ~10Hz
 
 const touches = new Map();
-let leftStick  = {x:0, y:0, rawX:0, rawY:0};
+let leftStick  = {x:0, y:0, rawX:0, rawY:-100};
 let rightStick = {x:0, y:0, rawX:0, rawY:0};
 
 let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
@@ -211,8 +213,10 @@ const MIN_CHANGE_THRESHOLD = 0.5;
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
 const DEADZONE = 3;   // 死区 3%
 const EXPO    = 40;   // 指数曲线 40%
+const ARM_THROTTLE_LIMIT = 5; // 解锁油门上限（%），油门超过此值时禁止解锁
 
 let consecutiveFails = 0; // 连续失败计数，>=3 才判定断连
+let currentFlightMode = 2; // 当前飞行模式编号（与后端同步：2=自稳）
 
 let buttonStates     = new Array(16).fill(false);
 let lastButtonStates = new Array(16).fill(false);
@@ -224,8 +228,7 @@ const buttonConfigs = [
   {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机"},
   {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机"},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止"},
-  {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"ACRO↔STAB切换"},
-  {icon:"🎯",label:"摇杆校准",   color:"#7209b7",desc:"摇杆中心校准"},
+  {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
 ];
 
@@ -235,6 +238,18 @@ function init() {
   initNetwork();
   initPointerEvents();
   requestAnimationFrame(animationLoop);
+  requestAnimationFrame(initKnobPositions);
+}
+
+function initKnobPositions() {
+  // 根据初始 rawY 将旋鈕定位到正确位置（左摇杆油门在底部）
+  const joystick = document.getElementById('joystick-left');
+  const knob     = document.getElementById('knob-left');
+  const rect     = joystick.getBoundingClientRect();
+  if (rect.width === 0) { requestAnimationFrame(initKnobPositions); return; } // 布局未就绪则重试
+  const radius = rect.width / 2 - 16;
+  const dy = -leftStick.rawY / 100 * radius; // rawY=-100 → dy=radius（底部）
+  knob.style.transform = `translate(calc(-50% + 0px), calc(-50% + ${dy}px))`;
 }
 
 function initButtons() {
@@ -298,13 +313,13 @@ function applyCurve(value) {
 function processJoystickInput() {
   const throttleRaw = (leftStick.rawY + 100) / 2;
   currentValues.throttle = throttleRaw; // 线性，后端限幅
-  currentValues.yaw   = applyCurve(leftStick.rawX);
-  currentValues.pitch = applyCurve(rightStick.rawY);
-  currentValues.roll  = applyCurve(rightStick.rawX);
-  leftStick.x  = applyCurve(leftStick.rawX);
+  currentValues.yaw   = -applyCurve(leftStick.rawX);   // 负号：匹配飞控坐标系
+  currentValues.pitch = -applyCurve(rightStick.rawY);  // 负号：匹配飞控坐标系
+  currentValues.roll  = -applyCurve(rightStick.rawX);  // 负号：匹配飞控坐标系
+  leftStick.x  = -applyCurve(leftStick.rawX);
   leftStick.y  = throttleRaw - 50;
-  rightStick.x = applyCurve(rightStick.rawX);
-  rightStick.y = applyCurve(rightStick.rawY);
+  rightStick.x = -applyCurve(rightStick.rawX);
+  rightStick.y = -applyCurve(rightStick.rawY);
 }
 
 function hasSignificantChange(nv) {
@@ -358,12 +373,17 @@ function handlePointerMove(e, side) {
 function handlePointerEnd(e, side) {
   if (touches.get(e.pointerId) !== side) return;
   touches.delete(e.pointerId);
-  const knob = document.getElementById(`knob-${side}`);
-  document.getElementById(`joystick-${side}`).classList.remove('active');
+  const knob     = document.getElementById(`knob-${side}`);
+  const joystick = document.getElementById(`joystick-${side}`);
+  joystick.classList.remove('active');
+  // 计算归位目标：左摇杆Y轴非ALTHOLD时归底，其他归中
+  const targetRawY = (side === 'left' && currentFlightMode !== 3) ? -100 : 0;
+  const radius = joystick.getBoundingClientRect().width / 2 - 16;
+  const targetDy = -targetRawY / 100 * radius;
   knob.style.transition = 'transform 0.2s ease-out';
-  knob.style.transform  = 'translate(-50%, -50%)';
+  knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${targetDy}px))`;
   setTimeout(() => { knob.style.transition = ''; }, 200);
-  if (side === 'left')  leftStick  = {x:0, y:0, rawX:0, rawY:0};
+  if (side === 'left')  leftStick  = {x:0, y:0, rawX:0, rawY: targetRawY};
   else                  rightStick = {x:0, y:0, rawX:0, rawY:0};
   processJoystickInput();
   sendJoystickData();
@@ -374,7 +394,7 @@ function updateJoystickPosition(side, clientX, clientY) {
   const knob     = document.getElementById(`knob-${side}`);
   const rect     = joystick.getBoundingClientRect();
   const cx = rect.width / 2, cy = rect.height / 2;
-  const radius = cx - 30;
+  const radius = cx - 16;
   let dx = (clientX - rect.left) - cx;
   let dy = (clientY - rect.top)  - cy;
   const dist = Math.sqrt(dx*dx + dy*dy);
@@ -393,8 +413,9 @@ function sendToESP(url, data) {
       consecutiveFails = 0;
       updateConnectionStatus(true);
       if (resp.m !== undefined) {
-        const names = ['RAW','ACRO','STAB','AUTO'];
-        document.getElementById('flight-mode').textContent = names[resp.m] || 'STAB';
+        currentFlightMode = resp.m;
+        const names = ['直控','特技','自稳','定高','自动'];
+        document.getElementById('flight-mode').textContent = names[resp.m] || '自稳';
       }
       if (resp.arm !== undefined) {
         const el   = document.getElementById('armed-status');
@@ -422,7 +443,7 @@ function updateNetworkStatus() {
   const lr = packetStats.sent > 0 ? (packetStats.lost/packetStats.sent*100).toFixed(1) : '0';
   document.getElementById('packet-loss').textContent = lr + '%';
   fetch('/web_rc/status').then(r=>r.json()).then(d => {
-    document.getElementById('battery').textContent = d.voltage ? d.voltage + 'V' : '-';
+    document.getElementById('battery').textContent = (d.voltage !== undefined && d.voltage !== null && d.voltage > 0.5) ? parseFloat(d.voltage).toFixed(2) + 'V' : '-';
   }).catch(()=>{ document.getElementById('battery').textContent = '-'; });
 }
 
@@ -436,20 +457,22 @@ function updateConnectionStatus(connected) {
 
 /*======================== 按钮处理 ========================*/
 function handleButton(idx) {
-  if (idx === 4) { calibrateCenter(); return; }
-  if (idx === 5) { toggleConsole(); return; }
+  if (idx === 4) { toggleConsole(); return; }
   if (idx === 3) {
-    const mode = document.getElementById('flight-mode').textContent;
-    const bit  = (mode === 'STAB') ? 7 : 6;
-    sendButtonData(bit, 1);
-    setTimeout(() => sendButtonData(bit, 0), 100);
+    // 模式循环：自稳(2)→特技(1)→定高(3)→自稳
+    let nextBit;
+    if (currentFlightMode === 2)      nextBit = 7; // STAB→ACRO
+    else if (currentFlightMode === 1) nextBit = 8; // ACRO→ALTHOLD
+    else                              nextBit = 6; // 其他→STAB
+    sendButtonData(nextBit, 1);
+    setTimeout(() => sendButtonData(nextBit, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
   // 解锁/上锁/急停：脉冲模式，后端用上升沿检测
   if (idx === 0 || idx === 1 || idx === 2) {
-    if (idx === 0 && currentValues.throttle > 30) {
-      showToast('⚠️ 油门过高，无法解锁！请将油门降至30%以下');
+    if (idx === 0 && currentValues.throttle > ARM_THROTTLE_LIMIT) {
+      showToast(`⚠️ 油门过高，无法解锁！请将油门降至${ARM_THROTTLE_LIMIT}%以下`);
       return;
     }
     sendButtonData(idx, 1);
@@ -470,16 +493,6 @@ function showToast(msg) {
   t.textContent = msg; t.style.opacity = '1';
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
-}
-
-/*======================== 摇杆校准 ========================*/
-function calibrateCenter() {
-  if (confirm('请确保摇杆在中心位置，然后点击确定进行校准')) {
-    leftStick = rightStick = {x:0,y:0,rawX:0,rawY:0};
-    currentValues = lastSentValues = {throttle:0,roll:0,pitch:0,yaw:0};
-    sendToESP('/web_rc', {t:3, ts:performance.now()});
-    alert('校准完成！');
-  }
 }
 
 /*======================== 调试控制台 ========================*/

@@ -1,10 +1,13 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // Implementation of command line interface 
 
 #include "pid.h"
 #include "vector.h"
 #include "util.h"
+
+#if WEB_RC_ENABLED
+extern bool webConsoleRedirect;
+extern void webLog(const char* msg);
+#endif
 
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
 extern const int RAW, ACRO, STAB, AUTO;
@@ -56,6 +59,9 @@ void print(const char* format, ...) {
 	Serial.print(buf);
 #if WIFI_ENABLED
 	mavlinkPrint(buf);
+#endif
+#if WEB_RC_ENABLED
+	if (webConsoleRedirect) webLog(buf);
 #endif
 }
 

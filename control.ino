@@ -39,9 +39,11 @@
 #define ROLLRATE_MAX radians(360)
 #define YAWRATE_MAX radians(300) // 偏航转速稍低
 #define TILT_MAX radians(30) // 最大倾斜角30°
+#define ALTHOLD_HOVER_THRUST 0.5f   // 定高悬停基础推力（stub，待气压计实现后替换）
+#define ARM_THROTTLE_LIMIT   5.0f   // 解锁油门上限（%），油门超过此值时禁止解锁
 #define RATES_D_LPF_ALPHA 0.2 // cutoff frequency ~ 40 Hz
 
-const int RAW = 0, ACRO = 1, STAB = 2, AUTO = 3; // flight modes
+const int RAW = 0, ACRO = 1, STAB = 2, ALTHOLD = 3, AUTO = 4; // flight modes
 int mode = STAB;
 bool armed = false;
 
@@ -191,11 +193,12 @@ void controlTorque() {
 
 const char* getModeName() {
 	switch (mode) {
-		case RAW: return "RAW";
-		case ACRO: return "ACRO";
-		case STAB: return "STAB";
-		case AUTO: return "AUTO";
-		default: return "UNKNOWN";
+		case RAW:     return "RAW";
+		case ACRO:    return "ACRO";
+		case STAB:    return "STAB";
+		case ALTHOLD: return "ALTHOLD";
+		case AUTO:    return "AUTO";
+		default:      return "UNKNOWN";
 	}
 }
 
@@ -225,7 +228,7 @@ void interpretWebRC() {
 
 	// 按钮0：解锁（上升沿，油门不超过30%时允许）
 	if (risingEdge & 0x0001) {
-		if (webRCThrottle <= 30.0f) {
+		if (webRCThrottle <= ARM_THROTTLE_LIMIT) {
 			armed = true;
 		}
 	}
@@ -250,7 +253,12 @@ void interpretWebRC() {
 	if (risingEdge & 0x0080) {
 		mode = ACRO;
 	}
-	
+
+	// 按钮8：ALTHOLD定高模式（上升沿）
+	if (risingEdge & 0x0100) {
+		mode = ALTHOLD;
+	}
+
 	// 处理模式切换
 	static int lastMode = STAB;
 	if (mode != lastMode) {
@@ -272,8 +280,14 @@ void combineInputs() {
 	float throttle = webRCThrottle;
 	
 	// 油门处理：从0-100%转换到0-1范围
-	thrustTarget = constrain(throttle / 100.0f, 0.0f, 1.0f);
-	
+	if (mode == ALTHOLD) {
+		// 定高模式：油门50%=悬停保持，>50%=爬升，<50%=下降
+		float climbRate = (throttle - 50.0f) / 50.0f; // -1~+1，0=悬停
+		thrustTarget = constrain(ALTHOLD_HOVER_THRUST + climbRate * 0.2f, 0.0f, 1.0f);
+	} else {
+		thrustTarget = constrain(throttle / 100.0f, 0.0f, 1.0f);
+	}
+
 	// 摇杆处理：从±30范围转换到±1范围（用于倾角和角速度）
 	float rollNorm = constrain(roll / 30.0f, -1.0f, 1.0f);
 	float pitchNorm = constrain(pitch / 30.0f, -1.0f, 1.0f);
@@ -306,7 +320,17 @@ void combineInputs() {
 		ratesTarget.invalidate();
 		torqueTarget = Vector(rollNorm, pitchNorm, -yawNorm) * 0.1;
 	}
-	
+
+	if (mode == ALTHOLD) {
+		// 定高模式：姿态控制同STAB，油门已在上方作为升降速率处理
+		float yawTarget = attitudeTarget.getYaw();
+		if (!armed || invalid(yawTarget) || abs(yawNorm) > 0.05) {
+			yawTarget = attitude.getYaw();
+		}
+		attitudeTarget = Quaternion::fromEuler(Vector(rollNorm * tiltMax, pitchNorm * tiltMax, yawTarget));
+		ratesExtra = Vector(0, 0, -yawNorm * maxRate.z);
+	}
+
 	// 调试输出
 	static unsigned long lastDebug = 0;
 	if (millis() - lastDebug > 1000) {

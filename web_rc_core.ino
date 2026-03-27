@@ -51,6 +51,7 @@ WebServer webRCServer(8080);
 bool webRCEnabled = false;
 bool useWebRC = false;
 bool webRCUpdated = false;
+bool webConsoleRedirect = false; // Web调试控制台输出重定向标志
 float webRCRoll = 0.0f, webRCPitch = 0.0f, webRCYaw = 0.0f, webRCThrottle = 0.0f;
 uint16_t webRCButtons = 0;
 unsigned long webRCLastUpdate = 0;
@@ -977,6 +978,7 @@ void setupWebRC() {
     });
     
     webRCServer.on("/web_rc", HTTP_POST, handleWebRCRequest);
+    webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);  // 心跳专用路由
 
     // ---- 控制台日志接口 ----
     webRCServer.on("/console", HTTP_GET, []() {
@@ -1003,17 +1005,10 @@ void setupWebRC() {
             char logLine[CONSOLE_LINE_LEN];
             snprintf(logLine, sizeof(logLine), "> %s", cmd.c_str());
             webLog(logLine);
-            // 解析简单命令
-            if (cmd == "arm")              { armed = true;  webLog("CMD: armed"); }
-            else if (cmd == "disarm")      { armed = false; webLog("CMD: disarmed"); }
-            else if (cmd == "mode stab")   { mode = STAB;   webLog("CMD: mode=STAB"); }
-            else if (cmd == "mode acro")   { mode = ACRO;   webLog("CMD: mode=ACRO"); }
-            else if (cmd == "status") {
-                char s[CONSOLE_LINE_LEN];
-                snprintf(s, sizeof(s), "T=%.1f R=%.1f P=%.1f Y=%.1f arm=%d mode=%d",
-                    webRCThrottle, webRCRoll, webRCPitch, webRCYaw, (int)armed, (int)mode);
-                webLog(s);
-            } else { webLog("Unknown cmd"); }
+            // 开启重定向，让 print() 同时写入 consoleBuf
+            webConsoleRedirect = true;
+            doCommand(cmd, false);
+            webConsoleRedirect = false;
         }
         webRCServer.send(200, "application/json", "{\"ok\":1}");
     });
@@ -1022,7 +1017,9 @@ void setupWebRC() {
         String json = "{";
         json += "\"enabled\":" + String(isWebRCEnabled() ? "true" : "false") + ",";
         json += "\"active\":" + String(isUsingWebRC() ? "true" : "false") + ",";
-        json += "\"voltage\":" + String(readBatteryVoltage(), 2) + ",";
+        float vbat = readBatteryVoltage();
+        if (isnan(vbat) || isinf(vbat) || vbat < 0.0f) vbat = 0.0f;
+        json += "\"voltage\":" + String(vbat, 2) + ",";
         json += "\"clients\":0,";  // 简化，不依赖WiFi类
         json += "\"current_data\":{";
         json += "\"throttle\":" + String(webRCThrottle, 1) + ",";

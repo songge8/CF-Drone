@@ -7,7 +7,8 @@ enum FlightMode {
     MODE_MANUAL = 0,
     MODE_ACRO = 1,
     MODE_STAB = 2,
-    MODE_AUTO = 3
+    MODE_ALTHOLD = 3,  // 气压计定高（油门=升降速率）
+    MODE_AUTO = 4
 };
 
 // 控制状态结构

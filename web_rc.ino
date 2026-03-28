@@ -1,5 +1,5 @@
 // web_rc.ino
-// Web RC 核心模块 - 基础版（无气压定高功能）
+// Web RC 服务端
 
 #if WEB_RC_ENABLED
 
@@ -8,461 +8,101 @@
 #include <WiFi.h>
 #include "web_rc_html.h"
 
-// 飞控统一控制变量（供协议适配层写入，与SBUS/MAVLink共用）
+// 飞控统一控制变量（供协议适配层写入，与 SBUS/MAVLink 共用）
 extern float t;
 extern float controlTime;
 extern float controlRoll, controlPitch, controlYaw, controlThrottle, controlMode;
 
-// 使用与wifi.ino相同的SSID和密码
-extern const char* WIFI_SSID;
-extern const char* WIFI_PASSWORD;
+// ==================== 配置常量 ====================
+#define WEB_RC_TIMEOUT_MS    10000          // 连接超时：最后一次收包超过此时间(ms)视为断连；需大于心跳间隔
+#define VBAT_ADC_PIN         36             // 电池电压采样引脚（GPIO36/VP，只读ADC）
+#define VBAT_ADC_SAMPLES     16             // ADC多次采样取均值，越大噪声越低、响应越慢
+#define VBAT_DIVIDER         (43.0f / 33.0f)// 分压比：上桥10kΩ+下桥33kΩ，公式 Vbat = Vadc × 43/33
 
-const char* WEB_RC_SSID = WIFI_SSID;
-const char* WEB_RC_PASSWORD = WIFI_PASSWORD;
+// ==================== 连接状态标志 ====================
+bool webRCEnabled    = false;  // Web RC 当前有有效连接（由 readWebRC() 每帧更新）
+bool useWebRC        = false;  // 当前正在使用 Web RC 控制（与 webRCEnabled 保持同步）
+bool webRCUpdated    = false;  // 收到过至少一次摇杆数据（首次连接前为 false）
+bool webConsoleEnabled = false; // Web 调试控制台开关：POST /console/enable 开启，开启后 print() 写入缓冲区
 
-// Web服务器实例 - 使用8080端口避免冲突
-WebServer webRCServer(8080);
+// ==================== 摇杆暂存值（供状态端点读取）====================
+// 单位：油门 0~100（%），姿态轴 ±30（°），按下=1/松开=0
+float webRCRoll     = 0.0f;
+float webRCPitch    = 0.0f;
+float webRCYaw      = 0.0f;
+float webRCThrottle = 0.0f;
+uint16_t webRCButtons    = 0;       // 16位按钮位掩码，bit0=解锁 bit1=上锁 bit2=急停 bit6=STAB bit7=ACRO bit8=ALTHOLD
+unsigned long webRCLastUpdate = 0;  // 最后一次收包的 millis() 时间戳
 
-// ==================== 性能优化常量 ====================
-#define COMMAND_JOYSTICK 0x01    // 使用单字节命令标识
-#define COMMAND_BUTTON   0x02
-#define COMMAND_PARAMS   0x03
-#define COMMAND_HEARTBEAT 0x04
-#define COMMAND_RESET    0x06
+// ==================== 灵敏度缩放 ====================
+// 最终输出 = 处理后角度 × scale / STICK_MAX，结果写入 control* ([-1,1])
+// 减小 scale → 飞机响应更柔和；增大 → 更灵敏
+float webRCThrottleScale = 1.0f;    // 油门最大功率限制，1.0=100%，0.8=最多只能推到80%油门
+float webRCStickScale    = 0.85f;   // 横滚/俯仰灵敏度，建议范围 0.5~1.0
+float webRCYawScale      = 0.68f;   // 偏航灵敏度，偏航惯性小故单独偏低，建议范围 0.3~0.8
 
-#define PROTOCOL_BINARY  0x01    // 二进制协议标识
-#define PROTOCOL_JSON    0x02    // JSON协议标识
+// ==================== 死区 ====================
+// 归一化空间（0~1 比例），摇杆归中误差在死区内输出恒为 0
+// 增大 → 中立区更宽、误触更少；减小 → 响应更灵敏但易漂移
+float stickDeadzone    = 0.15f;     // 横滚/俯仰/偏航共用，15% 归一化死区
+float throttleDeadzone = 0.15f;     // 油门低端死区，推杆低于此比例时输出 0%（防抖）
 
-#define MAX_PACKET_SIZE  64      // 限制包大小
+// ==================== 输入值域（勿随意修改，需与前端保持一致）====================
+static const float THROTTLE_MIN = 0.0f;    // 油门输出下限（%）
+static const float THROTTLE_MAX = 100.0f;  // 油门输出上限（%）
+static const float STICK_MAX    = 30.0f;   // 姿态轴最大角度（°），对应前端满偏；修改需同步调整 PID TILT_MAX
+static const float RAW_MAX      = 100.0f;  // 前端摇杆归一化满偏值，前端 JS 固定输出 ±100
 
-// P0修复: 网络超时和心跳配置
-#define WEB_RC_TIMEOUT_MS      10000  // 连接超时阈值 (10秒，适应高延迟)
-#define WEB_RC_HEARTBEAT_MS    5000   // 心跳间隔 (5秒，小于超时阈值一半)
+// ==================== 内部状态（运行时，勿手动修改）====================
+static float lastValidThrottle = 0.0f;     // 上次通过验证的油门值，异常时回退使用
+static float lastValidRoll     = 0.0f;     // 上次通过验证的横滚值
+static float lastValidPitch    = 0.0f;     // 上次通过验证的俯仰值
+static float lastValidYaw      = 0.0f;     // 上次通过验证的偏航值
+static unsigned long lastDataErrorTime = 0; // 上次数据异常时间，用于限速错误日志输出
 
-// ==================== 代码配置常量（替代前端参数调节面板）====================
-#define CONFIG_THROTTLE_SCALE   1.0f    // 油门灵敏度系数（0.0~1.0）
-#define CONFIG_STICK_SCALE      0.85f   // 摇杆灵敏度系数（0.0~1.0）
-#define CONFIG_YAW_SCALE        0.68f   // 偏航灵敏度系数（0.0~1.0）
-#define CONFIG_STICK_DEADZONE   0.10f   // 摇杆死区（相对0~1）
-#define CONFIG_THROTTLE_DEADZONE 0.15f  // 油门死区（相对0~1）
+// ==================== 网络监控 ====================
+static uint32_t totalBytesReceived = 0;  // 累计接收字节数，用于计算实时带宽（bps）
 
-// ==================== 电池电压 ADC ====================
-#define VBAT_ADC_PIN     36             // GPIO36 (VP) 通过分压采集电池电压
-#define VBAT_ADC_SAMPLES 16             // 多次采样取均值降低噪声
-#define VBAT_DIVIDER     (43.0f / 33.0f)// 分压比: 10kΩ+33kΩ, Vbat=(Vadc*43/33)
-
-// ==================== 全局变量定义 ====================
-bool webRCEnabled = false;
-bool useWebRC = false;
-bool webRCUpdated = false;
-bool webConsoleEnabled = false; // Web调试控制台持久开关（POST /console/enable 开启）
-float webRCRoll = 0.0f, webRCPitch = 0.0f, webRCYaw = 0.0f, webRCThrottle = 0.0f;
-uint16_t webRCButtons = 0;
-unsigned long webRCLastUpdate = 0;
-
-// Web遥控器参数
-float webRCThrottleScale = 1.0f;
-float webRCStickScale = 1.0f;
-float webRCYawScale = 1.0f;
-
-// ==================== 摇杆校准参数 ====================
-// 重新校准的摇杆映射：
-// 左摇杆Y轴 → 油门 (Throttle) [0~100%]，最低位置为0，最高位置为100%
-// 左摇杆X轴 → 偏航 (Yaw) [-30~+30]，中心为0，左为负，右为正
-// 右摇杆Y轴 → 俯仰 (Pitch) [-30~+30]，中心为0，上为负，下为正
-// 右摇杆X轴 → 横滚 (Roll) [-30~+30]，中心为0，左为负，右为正
-
-// 死区设置 - 减少死区到10%避免操作迟钝
-float stickDeadzone = 0.10f;      // 10%死区（所有摇杆）
-float throttleDeadzone = 0.15f;   // 15%死区（油门）- 只在低端
-
-// 摇杆校准范围
-const float THROTTLE_MIN = 0.0f;     // 油门最低值
-const float THROTTLE_MAX = 100.0f;   // 油门最高值
-const float STICK_MIN = -30.0f;      // 摇杆最小值
-const float STICK_MAX = 30.0f;       // 摇杆最大值
-const float STICK_CENTER = 0.0f;     // 摇杆中心值
-
-// 原始输入范围（前端发送的范围）
-const float RAW_STICK_MIN = -100.0f;  // 前端发送的最小值
-const float RAW_STICK_MAX = 100.0f;   // 前端发送的最大值
-
-// 缩放因子：将±100范围缩放到±30范围
-const float STICK_SCALE_FACTOR = 30.0f / 100.0f;  // 0.3
-
-// 上次有效值
-float lastValidThrottle = 0.0f;
-float lastValidRoll = 0.0f;
-float lastValidPitch = 0.0f;
-float lastValidYaw = 0.0f;
-
-// 异常检测
-bool dataErrorDetected = false;
-unsigned long lastDataErrorTime = 0;
-
-// 补充缺失的变量
-float throttleExpo = 0.2f;
-
-// ====================== 内部使用的优化变量 ======================
-struct OptimizedRCData {
-    int16_t roll;
-    int16_t pitch;
-    int16_t yaw;
-    int16_t throttle;
-    uint16_t buttons;
-    uint32_t timestamp;
-    bool initialized;
-    uint8_t seq;  // 序列号用于增量更新
-};
-
-OptimizedRCData internalData = {0, 0, 0, 0, 0, 0, false, 0};
-
-// 增量更新数据结构
-struct DeltaData {
-    int8_t deltaRoll;
-    int8_t deltaPitch;
-    int8_t deltaYaw;
-    int8_t deltaThrottle;
-    uint8_t changedFlags;  // 位掩码表示哪些字段变化
-};
-
-DeltaData lastDelta = {0, 0, 0, 0, 0};
-
-// 数据验证标志
-bool dataValidationEnabled = true;
-
-// 性能统计
-uint32_t totalBytesReceived = 0;
-uint32_t totalPacketsReceived = 0;
-uint32_t jsonPackets = 0;
-uint32_t binaryPackets = 0;
-
-// ====================== 网络质量监控类 ======================
-class EnhancedNetworkMonitor {
-private:
-    unsigned long lastReceived;
-    uint16_t packetLoss;
-    uint32_t packetCount;
+class NetworkMonitor {
+    unsigned long lastReceived, lastByteCountTime;
+    uint16_t packetLoss, packetCount;
     uint16_t avgLatency;
-    uint32_t bytesPerSecond;
-    unsigned long lastByteCountTime;
-    uint32_t lastByteCount;
-    
+    uint32_t bytesPerSecond, lastByteCount;
 public:
-    EnhancedNetworkMonitor() : 
-        packetLoss(0), packetCount(0), avgLatency(0), bytesPerSecond(0) {
-        lastReceived = millis();
-        lastByteCountTime = millis();
-        lastByteCount = 0;
+    NetworkMonitor() : packetLoss(0), packetCount(0), avgLatency(0),
+                       bytesPerSecond(0), lastByteCount(0) {
+        lastReceived = lastByteCountTime = millis();
     }
-    
-    void update(unsigned long jsTimestamp, uint16_t bytes = 0) {
+    void update(unsigned long jsTs, uint16_t bytes = 0) {
         unsigned long now = millis();
-        
-        if (now - lastReceived > 150) {
-            packetLoss++;
-        }
-        
-        if (jsTimestamp > 0) {
-            uint16_t latency = (uint16_t)(now - jsTimestamp);
-            avgLatency = (avgLatency * 9 + latency) / 10;
-        }
-        
-        // 计算字节率
+        if (now - lastReceived > 150) packetLoss++;
+        if (jsTs > 0) avgLatency = (avgLatency * 9 + (uint16_t)(now - jsTs)) / 10;
         if (bytes > 0) {
             totalBytesReceived += bytes;
             if (now - lastByteCountTime >= 1000) {
-                bytesPerSecond = totalBytesReceived - lastByteCount;
-                lastByteCount = totalBytesReceived;
+                bytesPerSecond    = totalBytesReceived - lastByteCount;
+                lastByteCount     = totalBytesReceived;
                 lastByteCountTime = now;
             }
         }
-        
         lastReceived = now;
         packetCount++;
     }
-    
-    uint16_t getLatency() const { return avgLatency; }
-    
-    uint16_t getPacketLossRate() const { 
-        if (packetCount == 0) return 0;
-        return (packetLoss * 1000) / packetCount;
-    }
-    
-    uint32_t getPacketCount() const { return packetCount; }
+    uint16_t getLatency()        const { return avgLatency; }
+    uint16_t getPacketLossRate() const { return packetCount ? (packetLoss * 1000) / packetCount : 0; }
+    uint32_t getPacketCount()    const { return packetCount; }
     uint32_t getBytesPerSecond() const { return bytesPerSecond; }
-    unsigned long getLastReceived() const { return lastReceived; }
-    
-    void reset() {
-        packetLoss = 0;
-        packetCount = 0;
-        avgLatency = 0;
-        bytesPerSecond = 0;
-        lastReceived = millis();
-    }
-};
+} netMonitor;
 
-// ====================== 创建全局实例 ======================
-EnhancedNetworkMonitor netMonitor;
-
-// ====================== 内部函数声明 ======================
-void handleWebRCClient();
-void checkWebRCConnectionStatus();
-void logWebRCNetworkStatus();
-bool handleBinaryProtocol(uint8_t* data, size_t len);
-bool handleJSONProtocol(String& body);
-void handleJoystickCommandBinary(uint8_t* data, size_t len);
-void handleDeltaCommand(uint8_t* data, size_t len);
-void processJoystickData(float throttle, float roll, float pitch, float yaw, uint32_t timestamp);
-void handleButtonCommandBinary(uint8_t* data, size_t len);
-void sendBinaryResponse(uint8_t command, bool success, uint16_t latency);
-
-// 工具函数声明
-int16_t floatToInt16(float value);
-float int16ToFloat(int16_t value);
-bool validateWebRCData(float& throttle, float& roll, float& pitch, float& yaw);
-const char* findJsonValue(const char* json, const char* key);
-
-// ==================== 重新校准的摇杆处理函数 ====================
-// 应用死区 - 10%死区避免干扰
-float applyDeadzone(float value, float deadzone, float center = 0.0f) {
-    float distance = fabs(value - center);
-    if (distance < deadzone) {
-        return center;  // 在死区内，返回中心值
-    }
-    
-    // 应用死区缩放
-    if (value > center) {
-        return center + (value - center - deadzone) / (1.0f - deadzone);
-    } else {
-        return center - (center - value - deadzone) / (1.0f - deadzone);
-    }
-}
-
-// 缩放函数：将±100范围缩放到±30范围
-float scaleStickValue(float rawValue) {
-    // 首先确保在±100范围内
-    rawValue = constrain(rawValue, RAW_STICK_MIN, RAW_STICK_MAX);
-    
-    // 应用缩放因子（±100 → ±30）
-    return rawValue * STICK_SCALE_FACTOR;
-}
-
-// 处理摇杆值（修复油门处理 + 正确的死区应用）
-float processStickValue(float rawValue, float& lastValid, const char* axisName, bool isThrottle = false) {
-    // 第一步：检查是否为NaN或无穷大
-    if (isnan(rawValue) || isinf(rawValue)) {
-        if (millis() - lastDataErrorTime > 2000) {
-            print("⚠️ %s值异常: NaN/Inf，使用上次有效值 %.1f\n", axisName, lastValid);
-            lastDataErrorTime = millis();
-        }
-        return lastValid;
-    }
-    
-    // 第二步：检查是否为JSON解析错误（极大值）- 修复这里！
-    if (fabs(rawValue) > 1000.0f) {  // 降低阈值从10000到1000
-        if (millis() - lastDataErrorTime > 2000) {
-            print("⚠️ %s JSON解析错误: %.1f，重置为0\n", axisName, rawValue);
-            lastDataErrorTime = millis();
-        }
-        if (isThrottle) {
-            lastValid = THROTTLE_MIN;  // 油门归零
-            return THROTTLE_MIN;
-        } else {
-            lastValid = STICK_CENTER;  // 摇杆归中
-            return STICK_CENTER;
-        }
-    }
-    
-    // 第三步：根据摇杆类型应用不同的处理
-    float processedValue;
-    
-    if (isThrottle) {
-        // ================ 修复：油门处理 ================
-        // 处理前端发送的±100范围，正确转换到0~100%
-        // 但也要处理已经是0~100范围的情况
-        
-        // 先限制范围
-        rawValue = constrain(rawValue, RAW_STICK_MIN, RAW_STICK_MAX);
-        
-        // 调试输出原始值
-        static unsigned long lastDebug = 0;
-        static float lastRawDebug = 0;
-        if (fabs(rawValue - lastRawDebug) > 5.0f && millis() - lastDebug > 1000) {
-            print("油门原始值: %.1f (范围: -100~+100)\n", rawValue);
-            lastRawDebug = rawValue;
-            lastDebug = millis();
-        }
-        
-        // 方案1：如果是0~100范围，直接使用
-        if (rawValue >= 0.0f && rawValue <= 100.0f) {
-            processedValue = rawValue;
-        }
-        // 方案2：如果是±100范围，转换到0~100
-        else if (rawValue >= -100.0f && rawValue <= 100.0f) {
-            // 转换公式：-100 → 0, 0 → 50, +100 → 100
-            processedValue = (rawValue + 100.0f) / 2.0f;
-        }
-        // 方案3：其他情况，安全处理
-        else {
-            processedValue = THROTTLE_MIN;
-        }
-        
-        // ================ 修复：油门死区处理 ================
-        // 只在低端应用死区：如果油门值小于15%，则视为0
-        if (processedValue < throttleDeadzone * 100.0f) {
-            processedValue = THROTTLE_MIN;
-        }
-        
-        // 限制范围到0~100%
-        processedValue = constrain(processedValue, THROTTLE_MIN, THROTTLE_MAX);
-        
-    } else {
-        // ================ 修复：其他摇杆处理 ================
-        // 确保输入在合理范围内
-        rawValue = constrain(rawValue, RAW_STICK_MIN, RAW_STICK_MAX);
-        
-        // 缩放到±30范围
-        float scaledValue = rawValue * STICK_SCALE_FACTOR;
-        
-        // 应用死区（以0为中心）
-        processedValue = applyDeadzone(scaledValue, stickDeadzone * 30.0f, STICK_CENTER);
-        
-        // 限制到±30范围
-        processedValue = constrain(processedValue, STICK_MIN, STICK_MAX);
-        
-        // 调试输出
-        static unsigned long lastStickDebug = 0;
-        if (millis() - lastStickDebug > 2000) {
-            print("%s处理: 原始=%.1f, 缩放=%.1f, 处理后=%.1f\n", 
-                  axisName, rawValue, scaledValue, processedValue);
-            lastStickDebug = millis();
-        }
-    }
-    
-    // 保存有效值
-    lastValid = processedValue;
-    
-    return processedValue;
-}
-
-// 处理横滚（右摇杆X轴）- 简化函数
-float processRoll(float rawRoll) {
-    float result = processStickValue(rawRoll, lastValidRoll, "横滚", false);
-    return result;
-}
-
-// 处理俯仰（右摇杆Y轴）
-float processPitch(float rawPitch) {
-    // 注意：前端通常上推为负值，下拉为正值
-    float result = processStickValue(rawPitch, lastValidPitch, "俯仰", false);
-    return result;
-}
-
-// 处理偏航（左摇杆X轴）
-float processYaw(float rawYaw) {
-    float result = processStickValue(rawYaw, lastValidYaw, "偏航", false);
-    return result;
-}
-
-// 处理油门（左摇杆Y轴）- 应用死区后乘以功率限制系数
-float processThrottle(float rawThrottle) {
-    float result = processStickValue(rawThrottle, lastValidThrottle, "油门", true);
-    
-    // 应用功率限制（webRCThrottleScale: 0~1，默认1.0即无限制）
-    result = constrain(result * webRCThrottleScale, THROTTLE_MIN, THROTTLE_MAX);
-    
-    // 调试输出
-    static unsigned long lastThrottleDebug = 0;
-    static float lastThrottleValue = 0;
-    if (fabs(result - lastThrottleValue) > 5.0f && millis() - lastThrottleDebug > 1000) {
-        print("油门处理完成: 原始=%.1f, 限制系数=%.2f, 结果=%.1f%%\n", rawThrottle, webRCThrottleScale, result);
-        lastThrottleValue = result;
-        lastThrottleDebug = millis();
-    }
-    
-    return result;
-}
-
-// ====================== 数据转换工具函数 ======================
-int16_t floatToInt16(float value) {
-    return (int16_t)(value * 100.0f);
-}
-
-float int16ToFloat(int16_t value) {
-    return value / 100.0f;
-}
-
-bool validateWebRCData(float& throttle, float& roll, float& pitch, float& yaw) {
-    bool valid = true;
-    
-    // 更严格的JSON解析错误检查
-    if (fabs(roll) > 1000.0f || fabs(pitch) > 1000.0f || fabs(yaw) > 1000.0f) {
-        print("⚠️ JSON解析错误检测到: R=%.1f P=%.1f Y=%.1f\n", roll, pitch, yaw);
-        roll = lastValidRoll;
-        pitch = lastValidPitch;
-        yaw = lastValidYaw;
-        valid = false;
-    }
-    
-    // 检查NaN和无穷大
-    if (isnan(throttle) || isinf(throttle)) {
-        throttle = lastValidThrottle;
-        valid = false;
-    }
-    if (isnan(roll) || isinf(roll)) {
-        roll = lastValidRoll;
-        valid = false;
-    }
-    if (isnan(pitch) || isinf(pitch)) {
-        pitch = lastValidPitch;
-        valid = false;
-    }
-    if (isnan(yaw) || isinf(yaw)) {
-        yaw = lastValidYaw;
-        valid = false;
-    }
-    
-    // 记录错误
-    if (!valid && millis() - lastDataErrorTime > 2000) {
-        print("⚠️ 数据验证失败: T=%.1f R=%.1f P=%.1f Y=%.1f\n", 
-              throttle, roll, pitch, yaw);
-        lastDataErrorTime = millis();
-    }
-    
-    return valid;
-}
-
-// ====================== 快速JSON解析函数 ======================
-const char* findJsonValue(const char* json, const char* key) {
-    const char* keyPos = strstr(json, key);
-    if (!keyPos) return nullptr;
-    
-    const char* colonPos = strchr(keyPos, ':');
-    if (!colonPos) return nullptr;
-    
-    const char* valueStart = colonPos + 1;
-    while (*valueStart == ' ' || *valueStart == '\t' || *valueStart == '\"') valueStart++;
-    
-    return valueStart;
-}
-
-// ==================== 电池电压读取 ====================
-float readBatteryVoltage() {
-    long sum = 0;
-    for (int i = 0; i < VBAT_ADC_SAMPLES; i++) {
-        sum += analogRead(VBAT_ADC_PIN);
-    }
-    float vADC = (sum / (float)VBAT_ADC_SAMPLES / 4095.0f) * 3.3f;
-    return vADC * VBAT_DIVIDER;
-}
+// ==================== Web 服务器 ====================
+WebServer webRCServer(8080);
 
 // ==================== 控制台日志缓冲区 ====================
-#define CONSOLE_LINES   30
+#define CONSOLE_LINES    30
 #define CONSOLE_LINE_LEN 80
 static char consoleBuf[CONSOLE_LINES][CONSOLE_LINE_LEN];
-static int  consoleTail = 0;   // 下一条写入的位置（环形）
-static int  consoleFilled = 0; // 已填充行数（最大CONSOLE_LINES）
+static int  consoleTail   = 0;
+static int  consoleFilled = 0;
 
 void webLog(const char* msg) {
     strncpy(consoleBuf[consoleTail], msg, CONSOLE_LINE_LEN - 1);
@@ -471,528 +111,186 @@ void webLog(const char* msg) {
     if (consoleFilled < CONSOLE_LINES) consoleFilled++;
 }
 
-// ====================== 核心功能函数 ======================
+// ==================== 摇杆处理 ====================
+
+// 归一化空间死区（输入/输出均为 [-1, 1]）
+// 超出死区的部分线性重映射到满幅，满推摇杆=满输出
+float applyDeadzone(float norm, float deadzone) {
+    if (fabsf(norm) < deadzone) return 0.0f;
+    float sign = (norm > 0.0f) ? 1.0f : -1.0f;
+    return sign * (fabsf(norm) - deadzone) / (1.0f - deadzone);
+}
+
+// 处理姿态轴（横滚/俯仰/偏航）
+// 输入 raw ∈ [-100, +100]，输出 ∈ [-STICK_MAX, +STICK_MAX] (°)
+float processAxis(float raw, float& lastValid) {
+    if (isnan(raw) || isinf(raw) || fabsf(raw) > 1000.0f) {
+        if (millis() - lastDataErrorTime > 2000) lastDataErrorTime = millis();
+        return lastValid;
+    }
+    float norm = constrain(raw, -RAW_MAX, RAW_MAX) / RAW_MAX;
+    norm = applyDeadzone(norm, stickDeadzone);
+    lastValid = norm * STICK_MAX;
+    return lastValid;
+}
+
+// 处理油门轴
+// 前端：左摇杆Y轴，底部=-100，顶部=+100
+// 输出：pct ∈ [0, 100]
+float processThrottle(float raw) {
+    if (isnan(raw) || isinf(raw) || fabsf(raw) > 1000.0f) return lastValidThrottle;
+    raw = constrain(raw, -RAW_MAX, RAW_MAX);
+    // 线性映射：-100→0%，0→50%，+100→100%
+    float pct = (raw + RAW_MAX) / (2.0f * RAW_MAX) * THROTTLE_MAX;
+    if (pct < throttleDeadzone * THROTTLE_MAX) pct = 0.0f;
+    pct = constrain(pct * webRCThrottleScale, THROTTLE_MIN, THROTTLE_MAX);
+    lastValidThrottle = pct;
+    return pct;
+}
+
+// ==================== 核心数据处理 ====================
+
 void setWebRCInput(float roll, float pitch, float yaw, float throttle, uint16_t buttons) {
-    // 首先进行基本验证 - 修复：在验证前先约束范围
-    roll = constrain(roll, -1000.0f, 1000.0f);
-    pitch = constrain(pitch, -1000.0f, 1000.0f);
-    yaw = constrain(yaw, -1000.0f, 1000.0f);
-    throttle = constrain(throttle, -1000.0f, 1000.0f);
-    
-    if (!validateWebRCData(throttle, roll, pitch, yaw)) {
-        dataErrorDetected = true;
-        // 即使验证失败，也尝试处理，但使用上次有效值
-    }
-    
-    // ==================== 处理四个轴的数据 ====================
-    float processedThrottle = processThrottle(throttle);  // 左摇杆Y轴 → 0~100%
-    float processedYaw = processYaw(yaw);                // 左摇杆X轴 → -30~+30
-    float processedPitch = processPitch(pitch);          // 右摇杆Y轴 → -30~+30
-    float processedRoll = processRoll(roll);             // 右摇杆X轴 → -30~+30
-    
-    // 存储处理后的值
-    webRCRoll = processedRoll;
-    webRCPitch = processedPitch;
-    webRCYaw = processedYaw;
-    webRCThrottle = processedThrottle;
-    webRCButtons = buttons;
+    float pThrottle = processThrottle(throttle);
+    float pYaw      = processAxis(yaw,   lastValidYaw);
+    float pPitch    = processAxis(pitch, lastValidPitch);
+    float pRoll     = processAxis(roll,  lastValidRoll);
+
+    // 暂存处理后的值（供状态端点读取）
+    webRCThrottle = pThrottle;
+    webRCYaw      = pYaw;
+    webRCPitch    = pPitch;
+    webRCRoll     = pRoll;
+    webRCButtons  = buttons;
     webRCLastUpdate = millis();
-    webRCUpdated = true;
-    
-    internalData.roll = floatToInt16(processedRoll);
-    internalData.pitch = floatToInt16(processedPitch);
-    internalData.yaw = floatToInt16(processedYaw);
-    internalData.throttle = floatToInt16(processedThrottle);
-    internalData.buttons = buttons;
-    internalData.timestamp = millis();
-    internalData.initialized = true;
+    webRCUpdated  = true;
 
-    // 写入统一控制变量（与SBUS/MAVLink同路径，归一化到相同值域）
-    controlRoll     = constrain(processedRoll  * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
-    controlPitch    = constrain(processedPitch * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
-    controlYaw      = constrain(processedYaw   * webRCYawScale   / STICK_MAX, -1.0f, 1.0f);
-    controlThrottle = processedThrottle / THROTTLE_MAX; // processThrottle() 已应用 webRCThrottleScale
-    controlMode     = NAN;                              // 不干涉模式，由按钮直接设置
-    controlTime     = t;                                // 接管失控保护计时
+    // 写入统一控制变量（与 SBUS/MAVLink 同路径）
+    controlRoll     = constrain(pRoll  * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
+    controlPitch    = constrain(pPitch * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
+    controlYaw      = constrain(pYaw   * webRCYawScale   / STICK_MAX, -1.0f, 1.0f);
+    controlThrottle = pThrottle / THROTTLE_MAX;
+    controlMode     = NAN;
+    controlTime     = t;
 
-    // 调试输出 - 修复输出逻辑
     static unsigned long lastPrint = 0;
-    static uint8_t printCount = 0;
-    static float lastPrintedValues[4] = {0, 0, 0, 0};
-    static const char* axisNames[4] = {"R", "P", "Y", "T"};
-    
-    printCount++;
-    
-    // 检查是否有显著变化
-    float changes[4] = {
-        fabs(processedRoll - lastPrintedValues[0]),
-        fabs(processedPitch - lastPrintedValues[1]),
-        fabs(processedYaw - lastPrintedValues[2]),
-        fabs(processedThrottle - lastPrintedValues[3])
-    };
-    
-    bool shouldPrint = false;
-    
-    // 条件1：超过200ms且变化大于阈值
-    if (millis() - lastPrint > 200) {
-        shouldPrint = true;
-    }
-    // 条件2：任何轴变化超过5个单位
-    for (int i = 0; i < 4; i++) {
-        if (changes[i] > 5.0f) {
-            shouldPrint = true;
-            break;
-        }
-    }
-    // 条件3：每20次更新输出一次（防止过于频繁）
-    if (printCount >= 20) {
-        shouldPrint = true;
-    }
-    
-    if (shouldPrint) {
-        print("✓ Web RC: T=%.1f%% R=%.1f P=%.1f Y=%.1f | Buttons: 0x%04X\n",
-              processedThrottle, processedRoll, processedPitch, processedYaw, buttons);
-        
-        lastPrintedValues[0] = processedRoll;
-        lastPrintedValues[1] = processedPitch;
-        lastPrintedValues[2] = processedYaw;
-        lastPrintedValues[3] = processedThrottle;
+    static float lastPrintedThrottle = -1.0f;
+    if (millis() - lastPrint > 500 || fabsf(pThrottle - lastPrintedThrottle) > 5.0f) {
+        print("WebRC T=%.0f%% R=%.1f P=%.1f Y=%.1f Btn=0x%04X\n",
+              pThrottle, pRoll, pPitch, pYaw, buttons);
+        lastPrintedThrottle = pThrottle;
         lastPrint = millis();
-        printCount = 0;
     }
 }
 
-void processJoystickData(float throttle, float roll, float pitch, float yaw, uint32_t timestamp) {
-    // 应用基础限制 - 修复：先约束到合理范围
-    throttle = constrain(throttle, -200.0f, 200.0f);
-    roll = constrain(roll, -200.0f, 200.0f);
-    pitch = constrain(pitch, -200.0f, 200.0f);
-    yaw = constrain(yaw, -200.0f, 200.0f);
-    
-    // 调试输出原始数据
-    static unsigned long lastProcessDebug = 0;
-    static float lastValues[4] = {0, 0, 0, 0};
-    
-    float changes[4] = {
-        fabs(throttle - lastValues[0]),
-        fabs(roll - lastValues[1]),
-        fabs(pitch - lastValues[2]),
-        fabs(yaw - lastValues[3])
-    };
-    
-    bool shouldDebug = false;
-    for (int i = 0; i < 4; i++) {
-        if (changes[i] > 50.0f) {  // 变化超过50才输出调试
-            shouldDebug = true;
+// ==================== JSON 协议处理器 ====================
+
+const char* findJsonValue(const char* json, const char* key) {
+    const char* p = strstr(json, key);
+    if (!p) return nullptr;
+    p = strchr(p, ':');
+    if (!p) return nullptr;
+    p++;
+    while (*p == ' ' || *p == '"') p++;
+    return p;
+}
+
+bool handleJSONProtocol(String& body) {
+    if (body.length() == 0 || body.indexOf('{') == -1) return false;
+    const char* json = body.c_str();
+    const char* typePos = strstr(json, "\"t\":");
+    if (!typePos) return false;
+    int type = atoi(typePos + 4);
+    const char* v;
+
+    switch (type) {
+        case 1: { // 摇杆数据
+            float th = 0, r = 0, p = 0, y = 0;
+            uint32_t ts = 0;
+            if ((v = findJsonValue(json, "\"th\""))) th = atof(v);
+            if ((v = findJsonValue(json, "\"r\"")))  r  = atof(v);
+            if ((v = findJsonValue(json, "\"p\"")))  p  = atof(v);
+            if ((v = findJsonValue(json, "\"y\"")))  y  = atof(v);
+            if ((v = findJsonValue(json, "\"ts\""))) ts = atol(v);
+            setWebRCInput(r, p, y, th, webRCButtons);
+            netMonitor.update(ts);
             break;
         }
+        case 2: { // 按钮事件
+            int idx = 0, state = 0;
+            uint32_t ts = 0;
+            if ((v = findJsonValue(json, "\"b\"")))  idx   = atoi(v);
+            if ((v = findJsonValue(json, "\"s\"")))  state = atoi(v);
+            if ((v = findJsonValue(json, "\"ts\""))) ts    = atol(v);
+            if (idx >= 0 && idx < 16) {
+                if (state) webRCButtons |=  (1 << idx);
+                else       webRCButtons &= ~(1 << idx);
+                webRCLastUpdate = millis();
+                webRCUpdated    = true;
+            }
+            netMonitor.update(ts, body.length());
+            break;
+        }
+        case 4: // 心跳
+            netMonitor.update(0, body.length());
+            webRCLastUpdate = millis();
+            webRCUpdated    = true;
+            break;
     }
-    
-    if (shouldDebug && millis() - lastProcessDebug > 1000) {
-        print("处理前数据: T=%.1f R=%.1f P=%.1f Y=%.1f\n", 
-              throttle, roll, pitch, yaw);
-        lastValues[0] = throttle;
-        lastValues[1] = roll;
-        lastValues[2] = pitch;
-        lastValues[3] = yaw;
-        lastProcessDebug = millis();
-    }
-    
-    setWebRCInput(roll, pitch, yaw, throttle, webRCButtons);
-    netMonitor.update(timestamp);
+    return true;
 }
+
+// ==================== HTTP 请求处理 ====================
+
+void handleWebRCRequest() {
+    if (!webRCServer.hasArg("plain")) {
+        webRCServer.send(400, "application/json", "{\"e\":\"no data\"}");
+        return;
+    }
+    String body = webRCServer.arg("plain");
+    if (handleJSONProtocol(body)) {
+        char resp[128];
+        snprintf(resp, sizeof(resp),
+            "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d}",
+            netMonitor.getLatency(),
+            netMonitor.getPacketLossRate() / 10.0f,
+            mode, (int)armed);
+        webRCServer.send(200, "application/json", resp);
+    } else {
+        webRCServer.send(400, "application/json", "{\"e\":\"parse failed\"}");
+    }
+}
+
+// ==================== 电池电压 ====================
+
+float readBatteryVoltage() {
+    long sum = 0;
+    for (int i = 0; i < VBAT_ADC_SAMPLES; i++) sum += analogRead(VBAT_ADC_PIN);
+    return (sum / (float)VBAT_ADC_SAMPLES / 4095.0f) * 3.3f * VBAT_DIVIDER;
+}
+
+// ==================== 连接状态 ====================
 
 bool isWebRCEnabled() {
-    unsigned long now = millis();
-    return webRCUpdated && (now - webRCLastUpdate < 10000);  // P0修复: 2s→10s 适应高延迟网络
+    return webRCUpdated && (millis() - webRCLastUpdate < WEB_RC_TIMEOUT_MS);
 }
 
 bool isUsingWebRC() {
     return useWebRC && isWebRCEnabled();
 }
 
-// ====================== 二进制协议处理器 ======================
-bool handleBinaryProtocol(uint8_t* data, size_t len) {
-    if (len < 2) return false;  // 至少需要协议标识和命令
-    
-    uint8_t protocol = data[0];
-    uint8_t command = data[1];
-    
-    if (protocol != PROTOCOL_BINARY) return false;
-    
-    totalPacketsReceived++;
-    binaryPackets++;
-    
-    switch(command) {
-        case COMMAND_JOYSTICK:
-            handleJoystickCommandBinary(data, len);
-            break;
-        case COMMAND_BUTTON:
-            handleButtonCommandBinary(data, len);
-            break;
-        case COMMAND_HEARTBEAT:
-            netMonitor.update(0, len);
-            webRCLastUpdate = millis();
-            webRCUpdated = true;
-            sendBinaryResponse(command, true, netMonitor.getLatency());
-            break;
-        case 0x80:  // Delta命令 (0x80 = 128)
-            handleDeltaCommand(data, len);
-            break;
-        default:
-            print("未知二进制命令: 0x%02X\n", command);
-            sendBinaryResponse(command, false, 0);
-            return false;
-    }
-    
-    return true;
-}
+// ==================== 主设置函数 ====================
 
-void handleJoystickCommandBinary(uint8_t* data, size_t len) {
-    // 协议格式: [协议标识][命令][油门][滚转][俯仰][偏航][时间戳]
-    if (len >= 14) {  // 1+1+2+2+2+2+4=14字节
-        int16_t throttle = (data[2] << 8) | data[3];
-        int16_t roll = (data[4] << 8) | data[5];
-        int16_t pitch = (data[6] << 8) | data[7];
-        int16_t yaw = (data[8] << 8) | data[9];
-        uint32_t timestamp = (data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13];
-        
-        float fThrottle = int16ToFloat(throttle);
-        float fRoll = int16ToFloat(roll);
-        float fPitch = int16ToFloat(pitch);
-        float fYaw = int16ToFloat(yaw);
-        
-        // 记录原始值用于调试
-        static unsigned long lastRawDebug = 0;
-        if (millis() - lastRawDebug > 2000) {
-            print("Web RC二进制原始值: T=%d(%.1f) R=%d(%.1f) P=%d(%.1f) Y=%d(%.1f)\n", 
-                  throttle, fThrottle, roll, fRoll, pitch, fPitch, yaw, fYaw);
-            lastRawDebug = millis();
-        }
-        
-        processJoystickData(fThrottle, fRoll, fPitch, fYaw, timestamp);
-        sendBinaryResponse(COMMAND_JOYSTICK, true, netMonitor.getLatency());
-    }
-}
-
-void handleDeltaCommand(uint8_t* data, size_t len) {
-    // Delta协议格式: [协议标识][命令][变化标志][增量数据...][时间戳]
-    if (len >= 8) {
-        uint8_t changedFlags = data[2];
-        uint32_t timestamp = (data[len-4] << 24) | (data[len-3] << 16) | (data[len-2] << 8) | data[len-1];
-        
-        float newThrottle = webRCThrottle;
-        float newRoll = webRCRoll;
-        float newPitch = webRCPitch;
-        float newYaw = webRCYaw;
-        
-        int dataIndex = 3;
-        
-        if (changedFlags & 0x01) { // 油门变化
-            int8_t delta = (int8_t)data[dataIndex++];
-            newThrottle += delta * 0.5f; // 缩小增量范围
-        }
-        if (changedFlags & 0x02) { // 滚转变化
-            int8_t delta = (int8_t)data[dataIndex++];
-            newRoll += delta * 0.5f;
-        }
-        if (changedFlags & 0x04) { // 俯仰变化
-            int8_t delta = (int8_t)data[dataIndex++];
-            newPitch += delta * 0.5f;
-        }
-        if (changedFlags & 0x08) { // 偏航变化
-            int8_t delta = (int8_t)data[dataIndex++];
-            newYaw += delta * 0.5f;
-        }
-        
-        processJoystickData(newThrottle, newRoll, newPitch, newYaw, timestamp);
-        sendBinaryResponse(0x80, true, netMonitor.getLatency());
-    }
-}
-
-void handleButtonCommandBinary(uint8_t* data, size_t len) {
-    if (len >= 8) {  // 1+1+1+1+4=8字节
-        uint8_t buttonIndex = data[2];
-        uint8_t state = data[3];
-        uint32_t timestamp = (data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7];
-        
-        netMonitor.update(timestamp, len);
-        
-        if (buttonIndex < 16) {
-            if (state == 1) {
-                webRCButtons |= (1 << buttonIndex);
-            } else {
-                webRCButtons &= ~(1 << buttonIndex);
-            }
-            
-            webRCLastUpdate = millis();
-            webRCUpdated = true;
-        }
-        
-        sendBinaryResponse(COMMAND_BUTTON, true, netMonitor.getLatency());
-    }
-}
-
-void sendBinaryResponse(uint8_t command, bool success, uint16_t latency) {
-    char response[16];
-    uint8_t index = 0;
-    
-    response[index++] = PROTOCOL_BINARY;
-    response[index++] = command;
-    response[index++] = success ? 0x01 : 0x00;
-    
-    // 添加延迟数据
-    response[index++] = (latency >> 8) & 0xFF;
-    response[index++] = latency & 0xFF;
-    
-    // 添加性能统计
-    uint16_t packetLoss = netMonitor.getPacketLossRate();
-    response[index++] = (packetLoss >> 8) & 0xFF;
-    response[index++] = packetLoss & 0xFF;
-    
-    // 添加当前数据
-    int16_t throttle = floatToInt16(webRCThrottle);
-    response[index++] = (throttle >> 8) & 0xFF;
-    response[index++] = throttle & 0xFF;
-    
-    uint32_t timestamp = millis();
-    for (int i = 0; i < 4; i++) {
-        response[index++] = (timestamp >> (24 - i*8)) & 0xFF;
-    }
-    
-    // 创建String对象发送
-    String responseStr;
-    responseStr.reserve(index);
-    for (uint8_t i = 0; i < index; i++) {
-        responseStr += response[i];
-    }
-    
-    webRCServer.send(200, "application/octet-stream", responseStr);
-}
-
-// ====================== JSON协议处理器 ======================
-bool handleJSONProtocol(String& body) {
-    if (body.length() == 0 || body.indexOf('{') == -1) return false;
-    
-    totalPacketsReceived++;
-    jsonPackets++;
-    
-    const char* json = body.c_str();
-    
-    // 快速判断命令类型
-    const char* typePos = strstr(json, "\"t\":");
-    if (!typePos) return false;
-    
-    int type = atoi(typePos + 4);
-    
-    switch(type) {
-        case 1: { // 摇杆命令
-            float throttle = 0, roll = 0, pitch = 0, yaw = 0;
-            uint32_t timestamp = 0;
-            
-            const char* val;
-            if ((val = findJsonValue(json, "\"th\""))) throttle = atof(val);
-            if ((val = findJsonValue(json, "\"r\""))) roll = atof(val);
-            if ((val = findJsonValue(json, "\"p\""))) pitch = atof(val);
-            if ((val = findJsonValue(json, "\"y\""))) yaw = atof(val);
-            if ((val = findJsonValue(json, "\"ts\""))) timestamp = atol(val);
-            
-            // 记录JSON原始值（特别是异常值）
-            static unsigned long lastJsonDebug = 0;
-            static float lastValues[4] = {0, 0, 0, 0};
-            
-            float changes[4] = {
-                fabs(throttle - lastValues[0]),
-                fabs(roll - lastValues[1]),
-                fabs(pitch - lastValues[2]),
-                fabs(yaw - lastValues[3])
-            };
-            
-            bool shouldDebug = false;
-            for (int i = 0; i < 4; i++) {
-                if (changes[i] > 50.0f) {  // 显著变化才输出
-                    shouldDebug = true;
-                    break;
-                }
-            }
-            
-            if (shouldDebug && millis() - lastJsonDebug > 1000) {
-                print("Web RC JSON原始值: T=%.1f R=%.1f P=%.1f Y=%.1f\n", 
-                      throttle, roll, pitch, yaw);
-                lastValues[0] = throttle;
-                lastValues[1] = roll;
-                lastValues[2] = pitch;
-                lastValues[3] = yaw;
-                lastJsonDebug = millis();
-            }
-            
-            processJoystickData(throttle, roll, pitch, yaw, timestamp);
-            break;
-        }
-        case 2: { // 按钮命令
-            int buttonIndex = 0, state = 0;
-            uint32_t timestamp = 0;
-            
-            const char* val;
-            if ((val = findJsonValue(json, "\"b\""))) buttonIndex = atoi(val);
-            if ((val = findJsonValue(json, "\"s\""))) state = atoi(val);
-            if ((val = findJsonValue(json, "\"ts\""))) timestamp = atol(val);
-            
-            netMonitor.update(timestamp, body.length());
-            
-            if (buttonIndex >= 0 && buttonIndex < 16) {
-                if (state == 1) {
-                    webRCButtons |= (1 << buttonIndex);
-                } else {
-                    webRCButtons &= ~(1 << buttonIndex);
-                }
-                webRCLastUpdate = millis();
-                webRCUpdated = true;
-            }
-            break;
-        }
-        case 5: // 参数命令已移除，由代码中的CONFIG_常量替代
-            break;
-        case 4: // 心跳
-            netMonitor.update(0, body.length());
-            webRCLastUpdate = millis();
-            webRCUpdated = true;
-            break;
-    }
-    
-    return true;
-}
-
-// ====================== Web服务器处理器 ======================
-void handleWebRCRequest() {
-    String contentType = webRCServer.header("Content-Type");
-    
-    // 检查是否是二进制协议
-    if (contentType == "application/octet-stream" || contentType == "application/cbor") {
-        String body = webRCServer.arg("plain");
-        if (body.length() > 0) {
-            uint8_t* data = (uint8_t*)body.c_str();
-            if (handleBinaryProtocol(data, body.length())) {
-                return; // 二进制响应已发送
-            }
-        }
-    }
-    
-    // 回退到JSON处理
-    if (webRCServer.hasArg("plain")) {
-        String body = webRCServer.arg("plain");
-        
-        if (body.length() == 0) {
-            webRCServer.send(400, "application/json", "{\"e\":\"no data\"}");
-            return;
-        }
-        
-        // 尝试二进制协议 (检查首字节)
-        if (body.length() > 1) {
-            uint8_t firstByte = body[0];
-            if (firstByte == PROTOCOL_BINARY) {
-                if (handleBinaryProtocol((uint8_t*)body.c_str(), body.length())) {
-                    return;
-                }
-            }
-        }
-        
-        // 处理JSON协议
-        if (handleJSONProtocol(body)) {
-            // 构建精简JSON响应（含当前飞控模式和解锁状态，供前端状态栏更新）
-            char jsonResp[128];
-            snprintf(jsonResp, sizeof(jsonResp),
-                "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d}",
-                netMonitor.getLatency(),
-                netMonitor.getPacketLossRate() / 10.0,
-                mode,
-                (int)armed
-            );
-            
-            webRCServer.send(200, "application/json", jsonResp);
-        } else {
-            webRCServer.send(400, "application/json", "{\"e\":\"parse failed\"}");
-        }
-    } else {
-        webRCServer.send(400, "application/json", "{\"e\":\"no data\"}");
-    }
-}
-
-// ====================== 调度任务函数 ======================
-void handleWebRCClient() {
-    webRCServer.handleClient();
-}
-
-void checkWebRCConnectionStatus() {
-    if (isWebRCEnabled()) {
-        webRCEnabled = true;
-        useWebRC = true;
-    } else {
-        webRCEnabled = false;
-        useWebRC = false;
-    }
-}
-
-void logWebRCNetworkStatus() {
-    static unsigned long lastLog = 0;
-    if (millis() - lastLog > 30000) {
-        print("网络状态: 延迟=%ums 丢包=%.1f%% 数据包=%lu | ",
-              netMonitor.getLatency(),
-              netMonitor.getPacketLossRate() / 10.0,
-              netMonitor.getPacketCount());
-        
-        print("协议统计: 二进制=%lu JSON=%lu 总字节=%lu B/s=%lu | ",
-              binaryPackets, jsonPackets, totalBytesReceived, netMonitor.getBytesPerSecond());
-        
-        print("Web RC数据: T=%.1f%% R=%.1f P=%.1f Y=%.1f\n",
-              webRCThrottle, webRCRoll, webRCPitch, webRCYaw);
-        
-        lastLog = millis();
-    }
-}
-
-// ====================== 主设置函数 ======================
 void setupWebRC() {
-    print("==========================================\n");
-    print("  Web遥控器初始化 - 基础版（无气压定高）\n");
-    print("  修复横滚锁定和油门问题版\n");
-    print("==========================================\n");
-    
-    // 使用CONFIG_常量初始化参数（代替前端参数面板）
-    webRCThrottleScale = CONFIG_THROTTLE_SCALE;
-    webRCStickScale    = CONFIG_STICK_SCALE;
-    webRCYawScale      = CONFIG_YAW_SCALE;
-    stickDeadzone      = CONFIG_STICK_DEADZONE;
-    throttleDeadzone   = CONFIG_THROTTLE_DEADZONE;
-    
-    // 初始化上次有效值
-    lastValidThrottle = THROTTLE_MIN;  // 油门从0开始
-    lastValidRoll = STICK_CENTER;      // 其他摇杆从0开始
-    lastValidPitch = STICK_CENTER;
-    lastValidYaw = STICK_CENTER;
-    
-    print("  摇杆映射（±30范围限制）:\n");
-    print("  左摇杆Y轴 → 油门 (Throttle) [%.0f~%.0f%%]\n", THROTTLE_MIN, THROTTLE_MAX);
-    print("  左摇杆X轴 → 偏航 (Yaw) [%.0f~+%.0f]\n", STICK_MIN, STICK_MAX);
-    print("  右摇杆Y轴 → 俯仰 (Pitch) [%.0f~+%.0f]\n", STICK_MIN, STICK_MAX);
-    print("  右摇杆X轴 → 横滚 (Roll) [%.0f~+%.0f]\n", STICK_MIN, STICK_MAX);
-    print("  死区设置: 摇杆=10%%，油门=15%%（低端）\n");
-    print("  中心值: 油门=%.0f，其他摇杆=%.0f\n", THROTTLE_MIN, STICK_CENTER);
-    print("  缩放因子: %.2f (前端±100→实际±30)\n", STICK_SCALE_FACTOR);
-    print("  异常值过滤: 已启用（阈值降低到1000）\n");
-    print("  油门修复: 自动检测范围，0值正确处理为0%%\n");
-    print("  横滚修复: 修复锁定在±7.3的问题\n");
-    print("  功能版本: 基础版（无气压定高功能）\n");
-    
-    // 设置服务器回调
+    lastValidThrottle = THROTTLE_MIN;
+    lastValidRoll = lastValidPitch = lastValidYaw = 0.0f;
+
     webRCServer.on("/", HTTP_GET, []() {
         webRCServer.send(200, "text/html", webRCIndexHtml);
     });
-    
-    webRCServer.on("/web_rc", HTTP_POST, handleWebRCRequest);
-    webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);  // 心跳专用路由
+    webRCServer.on("/web_rc",           HTTP_POST, handleWebRCRequest);
+    webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);
 
-    // ---- 控制台日志接口 ----
     webRCServer.on("/console", HTTP_GET, []() {
         String json = "{\"lines\":[";
         int start = (consoleFilled < CONSOLE_LINES) ? 0 : consoleTail;
@@ -1003,8 +301,7 @@ void setupWebRC() {
             String line = consoleBuf[idx];
             line.replace("\\", "\\\\");
             line.replace("\"", "\\\"");
-            json += line;
-            json += "\"";
+            json += line + "\"";
         }
         json += "]}";
         webRCServer.send(200, "application/json", json);
@@ -1014,9 +311,9 @@ void setupWebRC() {
         String cmd = webRCServer.arg("plain");
         cmd.trim();
         if (cmd.length() > 0) {
-            char logLine[CONSOLE_LINE_LEN];
-            snprintf(logLine, sizeof(logLine), "> %s", cmd.c_str());
-            webLog(logLine);
+            char buf[CONSOLE_LINE_LEN];
+            snprintf(buf, sizeof(buf), "> %s", cmd.c_str());
+            webLog(buf);
             doCommand(cmd, false);
         }
         webRCServer.send(200, "application/json", "{\"ok\":1}");
@@ -1033,75 +330,51 @@ void setupWebRC() {
     });
 
     webRCServer.on("/web_rc/status", HTTP_GET, []() {
-        String json = "{";
-        json += "\"enabled\":" + String(isWebRCEnabled() ? "true" : "false") + ",";
-        json += "\"active\":" + String(isUsingWebRC() ? "true" : "false") + ",";
         float vbat = readBatteryVoltage();
-        if (isnan(vbat) || isinf(vbat) || vbat < 0.0f) vbat = 0.0f;
-        json += "\"voltage\":" + String(vbat, 2) + ",";
-        json += "\"clients\":0,";  // 简化，不依赖WiFi类
-        json += "\"current_data\":{";
-        json += "\"throttle\":" + String(webRCThrottle, 1) + ",";
-        json += "\"roll\":" + String(webRCRoll, 1) + ",";
-        json += "\"pitch\":" + String(webRCPitch, 1) + ",";
-        json += "\"yaw\":" + String(webRCYaw, 1);
-        json += "},";
-        
-        json += "\"stick_mapping\":{";
-        json += "\"left_y\":\"throttle (0~100%)\",";
-        json += "\"left_x\":\"yaw (-30~+30)\",";
-        json += "\"right_y\":\"pitch (-30~+30)\",";
-        json += "\"right_x\":\"roll (-30~+30)\",";
-        json += "\"deadzone\":\"" + String(stickDeadzone, 2) + "\",";
-        json += "\"throttle_center\":\"" + String(THROTTLE_MIN, 1) + "\",";
-        json += "\"stick_center\":\"" + String(STICK_CENTER, 1) + "\",";
-        json += "\"stick_range\":\"" + String(STICK_MAX, 1) + "\",";
-        json += "\"scale_factor\":\"" + String(STICK_SCALE_FACTOR, 2) + "\"";
-        json += "},";
-        
-        json += "\"latency\":" + String(netMonitor.getLatency()) + ",";
-        json += "\"loss_rate\":" + String(netMonitor.getPacketLossRate() / 10.0, 1) + ",";
-        json += "\"packets\":" + String(netMonitor.getPacketCount());
-        json += "}";
-        
+        if (isnan(vbat) || vbat < 0.0f) vbat = 0.0f;
+        char json[384];
+        snprintf(json, sizeof(json),
+            "{\"enabled\":%s,\"active\":%s,"
+            "\"voltage\":%.2f,"
+            "\"throttle\":%.1f,\"roll\":%.1f,\"pitch\":%.1f,\"yaw\":%.1f,"
+            "\"latency\":%u,\"loss_rate\":%.1f,\"packets\":%lu}",
+            isWebRCEnabled() ? "true" : "false",
+            isUsingWebRC()   ? "true" : "false",
+            vbat,
+            webRCThrottle, webRCRoll, webRCPitch, webRCYaw,
+            netMonitor.getLatency(),
+            netMonitor.getPacketLossRate() / 10.0f,
+            (unsigned long)netMonitor.getPacketCount());
         webRCServer.send(200, "application/json", json);
     });
-    
+
     webRCServer.begin();
-    
-    print("✓ Web RC 服务端已启动\n");
-    print("  访问地址: http://192.168.4.1:8080\n");
-    print("==========================================\n");
+    print("✓ Web RC 已启动: http://192.168.4.1:8080\n");
+    print("  死区 摇杆=%.0f%% 油门=%.0f%% | 缩放 摇杆=%.2f 偏航=%.2f\n",
+          stickDeadzone * 100.0f, throttleDeadzone * 100.0f,
+          webRCStickScale, webRCYawScale);
 }
 
-// ====================== 公共API函数 ======================
-void processWebRC() {
-    handleWebRCClient();
-    checkWebRCConnectionStatus();
-    
+// ==================== 主循环函数 ====================
+
+void readWebRC() {
+    webRCServer.handleClient();
+    if (isWebRCEnabled()) {
+        webRCEnabled = useWebRC = true;
+    } else {
+        webRCEnabled = useWebRC = false;
+    }
     static unsigned long lastLog = 0;
-    if (millis() - lastLog > 5000) {
-        logWebRCNetworkStatus();
+    if (millis() - lastLog > 30000) {
+        print("WebRC 延迟=%ums 丢包=%.1f%% 包数=%lu\n",
+              netMonitor.getLatency(),
+              netMonitor.getPacketLossRate() / 10.0f,
+              (unsigned long)netMonitor.getPacketCount());
         lastLog = millis();
     }
 }
 
-void readWebRC() {
-    processWebRC();
-}
-
 #else
-// 当WEB_RC_ENABLED为0时的空函数定义
-float throttleDeadzone = 0.15f;  // 统一使用15%死区
-float throttleExpo = 0.2f;
-
-void setupWebRC() {
-    print("Web RC已禁用\n");
-}
-
-void readWebRC() {
-}
-
-void processWebRC() {
-}
+void setupWebRC() { print("Web RC已禁用\n"); }
+void readWebRC()  {}
 #endif

@@ -24,7 +24,6 @@ float motors[4]; // normalized motors thrust in range [0..1]
 void setup() {
 	Serial.begin(115200);
 	print("程序初始化！\n");
-	print("Flix Web RC版本 - 无气压定高\n");
 	disableBrownOut();
 	setupParameters();
 	setupLED();

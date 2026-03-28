@@ -5,7 +5,7 @@
 #include "util.h"
 
 #if WEB_RC_ENABLED
-extern bool webConsoleRedirect;
+extern bool webConsoleEnabled;
 extern void webLog(const char* msg);
 #endif
 
@@ -61,7 +61,7 @@ void print(const char* format, ...) {
 	mavlinkPrint(buf);
 #endif
 #if WEB_RC_ENABLED
-	if (webConsoleRedirect) webLog(buf);
+	if (webConsoleEnabled) webLog(buf);
 #endif
 }
 

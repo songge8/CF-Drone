@@ -1,6 +1,4 @@
-// Copyright (c) 2024 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
-// 故障安全保护功能 - Web RC版本
+// 故障安全保护
 // Fail-safe functions
 
 #define RC_LOSS_TIMEOUT 1
@@ -19,7 +17,7 @@ extern float controlRoll, controlPitch, controlThrottle, controlYaw;
 extern bool webRCEnabled;
 extern bool useWebRC;
 extern unsigned long webRCLastUpdate;
-extern float webRCRoll, webRCPitch, webRCYaw, webRCThrottle;
+bool isUsingWebRC();
 #endif
 
 extern bool armed;
@@ -43,6 +41,9 @@ void failsafe() {
 void rcLossFailsafe() {
 	if (controlTime == 0) return; // no RC at all
 	if (!armed) return;
+#if WEB_RC_ENABLED
+	if (isUsingWebRC()) return; // WebRC独立负责其超时（webRCLossFailsafe）
+#endif
 	if (t - controlTime > RC_LOSS_TIMEOUT) {
 		descend();
 	}
@@ -63,25 +64,10 @@ void descend() {
 void autoFailsafe() {
 	static float roll, pitch, yaw, throttle;
 	
-	// 检查传统RC输入是否有变化
+	// control*已统一涳盖SBUS/MAVLink/WebRC输入，直接检查即可
 	if (roll != controlRoll || pitch != controlPitch || yaw != controlYaw || abs(throttle - controlThrottle) > 0.05) {
 		if (mode == AUTO) mode = STAB;
 	}
-	
-#if WEB_RC_ENABLED
-	// 检查Web遥控器输入是否有变化
-	static float webRoll = 0, webPitch = 0, webYaw = 0, webThrottle = 0;
-	if (useWebRC && webRCEnabled) {
-		if (webRoll != webRCRoll || webPitch != webRCPitch || 
-		    webYaw != webRCYaw || abs(webThrottle - webRCThrottle) > 5) {
-			if (mode == AUTO) mode = STAB;
-		}
-		webRoll = webRCRoll;
-		webPitch = webRCPitch;
-		webYaw = webRCYaw;
-		webThrottle = webRCThrottle;
-	}
-#endif
 	
 	roll = controlRoll;
 	pitch = controlPitch;

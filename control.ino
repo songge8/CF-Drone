@@ -1,6 +1,4 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
-// 飞行控制Flight control，Web RC版本
+// 飞行控制
 
 #include "vector.h"
 #include "quaternion.h"
@@ -9,7 +7,6 @@
 #include "util.h"
 
 #if WEB_RC_ENABLED
-#include "web_rc_global.h"
 #include "control.h"
 #endif
 
@@ -40,7 +37,7 @@
 #define YAWRATE_MAX radians(300) // 偏航转速稍低
 #define TILT_MAX radians(30) // 最大倾斜角30°
 #define ALTHOLD_HOVER_THRUST 0.5f   // 定高悬停基础推力（stub，待气压计实现后替换）
-#define ARM_THROTTLE_LIMIT   5.0f   // 解锁油门上限（%），油门超过此值时禁止解锁
+#define ARM_THROTTLE_LIMIT   0.05f  // 解锁油门上限（归一化后 0~1），5%，超过此值禁止解锁
 #define RATES_D_LPF_ALPHA 0.2 // cutoff frequency ~ 40 Hz
 
 const int RAW = 0, ACRO = 1, STAB = 2, ALTHOLD = 3, AUTO = 4; // flight modes
@@ -48,20 +45,7 @@ int mode = STAB;
 bool armed = false;
 
 #if WEB_RC_ENABLED
-// Web RC变量声明
-extern bool webRCEnabled;
-extern bool useWebRC;
-extern bool webRCUpdated;
-extern float webRCRoll, webRCPitch, webRCYaw, webRCThrottle;
 extern uint16_t webRCButtons;
-extern unsigned long webRCLastUpdate;
-extern float webRCThrottleScale;
-extern float webRCStickScale;
-extern float webRCYawScale;
-
-// Web RC函数声明
-bool isWebRCEnabled();
-bool isUsingWebRC();
 #endif
 
 PID rollRatePID(ROLLRATE_P, ROLLRATE_I, ROLLRATE_D, ROLLRATE_I_LIM, RATES_D_LPF_ALPHA);
@@ -86,7 +70,6 @@ void control() {
 	interpretControls();
 #if WEB_RC_ENABLED
 	interpretWebRC();
-	combineInputs();
 #endif
 	failsafe();
 	controlAttitude();
@@ -95,21 +78,20 @@ void control() {
 }
 
 void interpretControls() {
-#if WEB_RC_ENABLED
-	// 如果Web遥控器可用且正在使用，跳过传统RC解析
-	if (isUsingWebRC()) {
-		return;
-	}
-#endif
-	
 	if (controlMode < 0.25) mode = STAB;
 	if (controlMode < 0.75) mode = STAB;
 	if (controlMode > 0.75) mode = STAB;
 
 	if (mode == AUTO) return; // pilot is not effective in AUTO mode
 
+#if WEB_RC_ENABLED
+	if (!isUsingWebRC()) { // SBUS手势解锁仅当WebRC未活跃时生效
+#endif
 	if (controlThrottle < 0.05 && controlYaw > 0.95) armed = true; // arm gesture
 	if (controlThrottle < 0.05 && controlYaw < -0.95) armed = false; // disarm gesture
+#if WEB_RC_ENABLED
+	}
+#endif
 
 	if (abs(controlYaw) < 0.1) controlYaw = 0; // yaw dead zone
 
@@ -203,16 +185,9 @@ const char* getModeName() {
 }
 
 #if WEB_RC_ENABLED
-// Web遥控器控制解析
+// Web遥控器按钮处理（仅负责ARM/DISARM和模式切换）
 void interpretWebRC() {
-	if (!isWebRCEnabled()) {
-		useWebRC = false;
-		webRCEnabled = false;
-		return;
-	}
-	
-	webRCEnabled = true;
-	useWebRC = true;
+	if (!isUsingWebRC()) return;
 
 	// 处理解锁/上锁按钮（上升沿检测，避免每个控制周期重复触发）
 	static uint16_t lastWebRCButtons = 0;
@@ -226,9 +201,9 @@ void interpretWebRC() {
 		lastArmedState = armed;
 	}
 
-	// 按钮0：解锁（上升沿，油门不超过30%时允许）
+	// 按钮0：解锁（上升沿，与configThrottle一致）
 	if (risingEdge & 0x0001) {
-		if (webRCThrottle <= ARM_THROTTLE_LIMIT) {
+		if (controlThrottle < ARM_THROTTLE_LIMIT) {
 			armed = true;
 		}
 	}
@@ -259,84 +234,11 @@ void interpretWebRC() {
 		mode = ALTHOLD;
 	}
 
-	// 处理模式切换
+	// 模式切换日志
 	static int lastMode = STAB;
 	if (mode != lastMode) {
 		print("Web RC: 模式切换到 %s\n", getModeName());
 		lastMode = mode;
-	}
-}
-
-// 合并Web遥控器输入
-void combineInputs() {
-	if (!isUsingWebRC()) {
-		return;
-	}
-	
-	// 验证数据
-	float roll = webRCRoll;
-	float pitch = webRCPitch;
-	float yaw = webRCYaw;
-	float throttle = webRCThrottle;
-	
-	// 油门处理：从0-100%转换到0-1范围
-	if (mode == ALTHOLD) {
-		// 定高模式：油门50%=悬停保持，>50%=爬升，<50%=下降
-		float climbRate = (throttle - 50.0f) / 50.0f; // -1~+1，0=悬停
-		thrustTarget = constrain(ALTHOLD_HOVER_THRUST + climbRate * 0.2f, 0.0f, 1.0f);
-	} else {
-		thrustTarget = constrain(throttle / 100.0f, 0.0f, 1.0f);
-	}
-
-	// 摇杆处理：从±30范围转换到±1范围（用于倾角和角速度）
-	float rollNorm = constrain(roll / 30.0f, -1.0f, 1.0f);
-	float pitchNorm = constrain(pitch / 30.0f, -1.0f, 1.0f);
-	float yawNorm = constrain(yaw / 30.0f, -1.0f, 1.0f);
-	
-	// 应用灵敏度缩放
-	rollNorm *= webRCStickScale;
-	pitchNorm *= webRCStickScale;
-	yawNorm *= webRCYawScale;
-	
-	// 根据飞行模式设置控制目标
-	if (mode == STAB) {
-		float yawTarget = attitudeTarget.getYaw();
-		if (!armed || invalid(yawTarget) || abs(yawNorm) > 0.05) {
-			yawTarget = attitude.getYaw();
-		}
-		attitudeTarget = Quaternion::fromEuler(Vector(rollNorm * tiltMax, pitchNorm * tiltMax, yawTarget));
-		ratesExtra = Vector(0, 0, -yawNorm * maxRate.z);
-	}
-	
-	if (mode == ACRO) {
-		attitudeTarget.invalidate();
-		ratesTarget.x = rollNorm * maxRate.x;
-		ratesTarget.y = pitchNorm * maxRate.y;
-		ratesTarget.z = -yawNorm * maxRate.z;
-	}
-	
-	if (mode == RAW) {
-		attitudeTarget.invalidate();
-		ratesTarget.invalidate();
-		torqueTarget = Vector(rollNorm, pitchNorm, -yawNorm) * 0.1;
-	}
-
-	if (mode == ALTHOLD) {
-		// 定高模式：姿态控制同STAB，油门已在上方作为升降速率处理
-		float yawTarget = attitudeTarget.getYaw();
-		if (!armed || invalid(yawTarget) || abs(yawNorm) > 0.05) {
-			yawTarget = attitude.getYaw();
-		}
-		attitudeTarget = Quaternion::fromEuler(Vector(rollNorm * tiltMax, pitchNorm * tiltMax, yawTarget));
-		ratesExtra = Vector(0, 0, -yawNorm * maxRate.z);
-	}
-
-	// 调试输出
-	static unsigned long lastDebug = 0;
-	if (millis() - lastDebug > 1000) {
-		print("Web RC: T=%.1f%% R=%.2f P=%.2f Y=%.2f | 模式=%s\n",
-		      throttle, roll, pitch, yaw, getModeName());
-		lastDebug = millis();
 	}
 }
 #endif

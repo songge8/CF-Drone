@@ -1,7 +1,6 @@
-// Main firmware file 主程序文件 - Web RC版本
+// 主程序
 // 源代码使用Arduino IDE 2.3.x以上版本编译，不支持老版本的1.8.19！
-// 必须安装ESP32开发板核心库（即esp32 by Espressif Systems）
-// 必须安装MAVLINK，FlixPeriph库文件！
+// 必须安装ESP32开发板核心库（即esp32 by Espressif Systems）和依赖（MAVLINK等）
 // 开发板可选择ESP32 Dev Module或WeMOS D1 MINI ESP32
 
 #include "vector.h"
@@ -10,10 +9,6 @@
 
 #define WIFI_ENABLED 1
 #define WEB_RC_ENABLED 1  // 启用Web遥控器
-
-#if WEB_RC_ENABLED
-#include "web_rc_global.h"
-#endif
 
 float t = NAN; // current step time, s
 float dt; // time delta from previous step, s

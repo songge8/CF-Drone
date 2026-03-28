@@ -1,4 +1,4 @@
-// web_rc_core.ino
+// web_rc.ino
 // Web RC 核心模块 - 基础版（无气压定高功能）
 
 #if WEB_RC_ENABLED
@@ -6,8 +6,12 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
-#include "web_rc_global.h"
 #include "web_rc_html.h"
+
+// 飞控统一控制变量（供协议适配层写入，与SBUS/MAVLink共用）
+extern float t;
+extern float controlTime;
+extern float controlRoll, controlPitch, controlYaw, controlThrottle, controlMode;
 
 // 使用与wifi.ino相同的SSID和密码
 extern const char* WIFI_SSID;
@@ -51,7 +55,7 @@ WebServer webRCServer(8080);
 bool webRCEnabled = false;
 bool useWebRC = false;
 bool webRCUpdated = false;
-bool webConsoleRedirect = false; // Web调试控制台输出重定向标志
+bool webConsoleEnabled = false; // Web调试控制台持久开关（POST /console/enable 开启）
 float webRCRoll = 0.0f, webRCPitch = 0.0f, webRCYaw = 0.0f, webRCThrottle = 0.0f;
 uint16_t webRCButtons = 0;
 unsigned long webRCLastUpdate = 0;
@@ -502,7 +506,15 @@ void setWebRCInput(float roll, float pitch, float yaw, float throttle, uint16_t 
     internalData.buttons = buttons;
     internalData.timestamp = millis();
     internalData.initialized = true;
-    
+
+    // 写入统一控制变量（与SBUS/MAVLink同路径，归一化到相同值域）
+    controlRoll     = constrain(processedRoll  * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
+    controlPitch    = constrain(processedPitch * webRCStickScale / STICK_MAX, -1.0f, 1.0f);
+    controlYaw      = constrain(processedYaw   * webRCYawScale   / STICK_MAX, -1.0f, 1.0f);
+    controlThrottle = processedThrottle / THROTTLE_MAX; // processThrottle() 已应用 webRCThrottleScale
+    controlMode     = NAN;                              // 不干涉模式，由按钮直接设置
+    controlTime     = t;                                // 接管失控保护计时
+
     // 调试输出 - 修复输出逻辑
     static unsigned long lastPrint = 0;
     static uint8_t printCount = 0;
@@ -1005,11 +1017,18 @@ void setupWebRC() {
             char logLine[CONSOLE_LINE_LEN];
             snprintf(logLine, sizeof(logLine), "> %s", cmd.c_str());
             webLog(logLine);
-            // 开启重定向，让 print() 同时写入 consoleBuf
-            webConsoleRedirect = true;
             doCommand(cmd, false);
-            webConsoleRedirect = false;
         }
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+    });
+
+    webRCServer.on("/console/enable", HTTP_POST, []() {
+        webConsoleEnabled = true;
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+    });
+
+    webRCServer.on("/console/disable", HTTP_POST, []() {
+        webConsoleEnabled = false;
         webRCServer.send(200, "application/json", "{\"ok\":1}");
     });
 

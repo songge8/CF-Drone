@@ -33,4 +33,8 @@ void controlTorque();
 // 辅助函数
 const char* getModeName(int mode);
 
+// 外部函数声明
+bool isUsingWebRC();
+void setWebRCWarn(const char* msg);
+
 #endif // CONTROL_H

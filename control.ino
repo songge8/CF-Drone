@@ -201,10 +201,12 @@ void interpretWebRC() {
 		lastArmedState = armed;
 	}
 
-	// 按钮0：解锁（上升沿，与configThrottle一致）
+	// 按鈕。0：解锁（上升沿）
 	if (risingEdge & 0x0001) {
 		if (controlThrottle < ARM_THROTTLE_LIMIT) {
 			armed = true;
+		} else {
+			setWebRCWarn("油门过高，无法解锁");
 		}
 	}
 
@@ -229,9 +231,9 @@ void interpretWebRC() {
 		mode = ACRO;
 	}
 
-	// 按钮8：ALTHOLD定高模式（上升沿）
+	// 按鈕。8：ALTHOLD定高模式（上升沿）- 暂未实现
 	if (risingEdge & 0x0100) {
-		mode = ALTHOLD;
+		setWebRCWarn("定高模式暂不支持");
 	}
 
 	// 模式切换日志

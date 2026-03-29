@@ -13,7 +13,7 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 <style>
 /*======== 响应式变量 ========*/
 :root{
-  --js-size:clamp(140px,min(42vw,44vh),300px);
+  --js-size:clamp(150px,min(50vw,52vh),360px);
   --knob-size:calc(var(--js-size)*0.25);
   --pad:clamp(6px,1.5vmin,15px);
   --gap:clamp(6px,1.5vmin,15px);
@@ -86,7 +86,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 .joystick-knob{width:var(--knob-size);height:var(--knob-size);background:radial-gradient(circle at 30% 30%,#fff,#cccccc);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.7);box-shadow:0 4px 15px rgba(0,0,0,.5),inset 0 0 10px rgba(255,255,255,.5);cursor:move;transition:transform .1s ease-out;z-index:10}
 
 /*======== 按钮区 ========*/
-.buttons-container{flex:.8;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(150,150,150,.3);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
+.buttons-container{flex:.55;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(150,150,150,.3);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
 .buttons-grid{display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr);gap:8px;flex:1}
 .buttons-grid>button{grid-column:span 2}
 .buttons-grid>button:nth-child(4),.buttons-grid>button:nth-child(5){grid-column:span 3}
@@ -109,7 +109,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 竖屏自适应 ========*/
 @media (orientation:portrait){
-  :root{--js-size:clamp(140px,44vw,260px);--knob-size:calc(var(--js-size)*0.25)}
+  :root{--js-size:clamp(150px,46vw,280px);--knob-size:calc(var(--js-size)*0.25)}
   .content{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -128,7 +128,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 小屏横屏自适应（高度≤420px）========*/
 @media (max-height:420px) and (orientation:landscape){
-  :root{--js-size:clamp(110px,min(38vw,40vh),220px);--knob-size:calc(var(--js-size)*0.25)}
+  :root{--js-size:clamp(120px,min(42vw,44vh),240px);--knob-size:calc(var(--js-size)*0.25)}
   .joystick-title{font-size:0.72rem}
   .header h1{font-size:0.82rem}
   .header{padding:3px 8px}
@@ -211,16 +211,15 @@ let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 const MIN_CHANGE_THRESHOLD = 0.5;
 
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
-const DEADZONE = 3;   // 死区 3%
+const DEADZONE = 3;   // 死区（已移至后端 stickDeadzone 统一处理，前端不再使用）
 const EXPO    = 40;   // 指数曲线 40%
-const ARM_THROTTLE_LIMIT = 5; // 解锁油门上限（%），油门超过此值时禁止解锁
-
 let consecutiveFails = 0; // 连续失败计数，>=3 才判定断连
 let currentFlightMode = 2; // 当前飞行模式编号（与后端同步：2=自稳）
 
 let buttonStates     = new Array(16).fill(false);
 let lastButtonStates = new Array(16).fill(false);
 
+let lastPressedButton = -1; // 最近一次操作的按鈕编号，用于后端返回时判断结果 toast
 let consolePollingTimer = null;
 
 /*======================== 按钮配置（2×3 六宫格）========================*/
@@ -247,7 +246,7 @@ function initKnobPositions() {
   const knob     = document.getElementById('knob-left');
   const rect     = joystick.getBoundingClientRect();
   if (rect.width === 0) { requestAnimationFrame(initKnobPositions); return; } // 布局未就绪则重试
-  const radius = rect.width / 2 - 16;
+  const radius = rect.width / 2 - 10;
   const dy = -leftStick.rawY / 100 * radius; // rawY=-100 → dy=radius（底部）
   knob.style.transform = `translate(calc(-50% + 0px), calc(-50% + ${dy}px))`;
 }
@@ -300,26 +299,27 @@ function animationLoop(timestamp) {
 }
 
 /*======================== 摇杆曲线处理 ========================*/
+// 仅做 expo 曲线，死区由后端 stickDeadzone 统一处理（对齐 SBUS 模式）
 function applyCurve(value) {
   const absVal = Math.abs(value);
-  if (absVal < DEADZONE / 100) return 0;
-  const normalized = (absVal - DEADZONE / 100) / (1 - DEADZONE / 100);
   const expoFactor = EXPO / 100;
-  let curved = normalized * (1 - expoFactor) + Math.pow(normalized, 3) * expoFactor;
+  let curved = absVal * (1 - expoFactor) + Math.pow(absVal, 3) * expoFactor;
   return curved * (value >= 0 ? 1 : -1);
 }
 
 /*======================== 摇杆数据处理 ========================*/
 function processJoystickInput() {
-  const throttleRaw = (leftStick.rawY + 100) / 2;
-  currentValues.throttle = throttleRaw; // 线性，后端限幅
-  currentValues.yaw   = -applyCurve(leftStick.rawX);   // 负号：匹配飞控坐标系
-  currentValues.pitch = -applyCurve(rightStick.rawY);  // 负号：匹配飞控坐标系
-  currentValues.roll  = -applyCurve(rightStick.rawX);  // 负号：匹配飞控坐标系
-  leftStick.x  = -applyCurve(leftStick.rawX);
-  leftStick.y  = throttleRaw - 50;
-  rightStick.x = -applyCurve(rightStick.rawX);
-  rightStick.y = -applyCurve(rightStick.rawY);
+  // 发送原始值，后端统一完成映射（对齐SBUS/MAVLink模式，避免双重映射）
+  // 油门：rawY∈[-100,+100]，后端 processThrottle: (raw+100)/(2*RAW_MAX)*100 → 0~100%
+  // 姿态轴：归一化到[-1,1]做指数曲线后还原×100，后端除以RAW_MAX得[-1,1]
+  currentValues.throttle = leftStick.rawY;
+  currentValues.yaw   = applyCurve(leftStick.rawX  / 100) * 100;  // 右推=顺时针，与MAVLink一致
+  currentValues.pitch = applyCurve(rightStick.rawY / 100) * 100;  // 上推=前进，与MAVLink一致
+  currentValues.roll  = applyCurve(rightStick.rawX / 100) * 100;  // 右推=右滚，与MAVLink一致
+  leftStick.x  = currentValues.yaw;
+  leftStick.y  = leftStick.rawY;
+  rightStick.x = currentValues.roll;
+  rightStick.y = currentValues.pitch;
 }
 
 function hasSignificantChange(nv) {
@@ -353,7 +353,7 @@ function sendButtonData(buttonIndex, state) {
 
 /*======================== 显示更新 ========================*/
 function updateDisplayAll() {
-  document.getElementById('left-y').textContent  = Math.round(currentValues.throttle);
+  document.getElementById('left-y').textContent  = Math.round((currentValues.throttle + 100) / 2);
   document.getElementById('left-x').textContent  = Math.round(leftStick.x);
   document.getElementById('right-x').textContent = Math.round(rightStick.x);
   document.getElementById('right-y').textContent = Math.round(rightStick.y);
@@ -378,7 +378,7 @@ function handlePointerEnd(e, side) {
   joystick.classList.remove('active');
   // 计算归位目标：左摇杆Y轴非ALTHOLD时归底，其他归中
   const targetRawY = (side === 'left' && currentFlightMode !== 3) ? -100 : 0;
-  const radius = joystick.getBoundingClientRect().width / 2 - 16;
+  const radius = joystick.getBoundingClientRect().width / 2 - 10;
   const targetDy = -targetRawY / 100 * radius;
   knob.style.transition = 'transform 0.2s ease-out';
   knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${targetDy}px))`;
@@ -394,7 +394,7 @@ function updateJoystickPosition(side, clientX, clientY) {
   const knob     = document.getElementById(`knob-${side}`);
   const rect     = joystick.getBoundingClientRect();
   const cx = rect.width / 2, cy = rect.height / 2;
-  const radius = cx - 16;
+  const radius = cx - 10;
   let dx = (clientX - rect.left) - cx;
   let dy = (clientY - rect.top)  - cy;
   const dist = Math.sqrt(dx*dx + dy*dy);
@@ -412,18 +412,40 @@ function sendToESP(url, data) {
     .then(resp => {
       consecutiveFails = 0;
       updateConnectionStatus(true);
+      const names = ['直控','特技','自稳','定高','自动'];
+
+      // 模式切换结果
       if (resp.m !== undefined) {
+        if (resp.m !== currentFlightMode) {
+          if (!resp.warn) showToast('✅ 已切换：' + (names[resp.m] || '未知'));
+          const leftTouched = [...touches.values()].includes('left');
+          if (!leftTouched) resetLeftStick(resp.m === 3 ? 0 : -100);
+        }
         currentFlightMode = resp.m;
-        const names = ['直控','特技','自稳','定高','自动'];
         document.getElementById('flight-mode').textContent = names[resp.m] || '自稳';
       }
+
+      // ARM 状态更新 + 结果 toast
       if (resp.arm !== undefined) {
         const el   = document.getElementById('armed-status');
         const item = document.getElementById('armed-status-item');
         el.textContent = resp.arm ? '已解锁' : '已上锁';
         item.style.background = resp.arm ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,51,0.15)';
         el.style.color = resp.arm ? '#00ff88' : '#ff6666';
+        if (!resp.warn) {
+          if (lastPressedButton === 0)
+            showToast(resp.arm ? '✅ 已解锁' : '❌ 解锁失败');
+          else if (lastPressedButton === 1)
+            showToast(resp.arm ? '⚠️ 上锁失败' : '🔒 已上锁');
+          else if (lastPressedButton === 2)
+            showToast('🛑 电机已停止');
+        }
       }
+
+      // 后端警告——最后处理，保证覆盖前面的 toast
+      if (resp.warn) showToast('⚠️ ' + resp.warn);
+
+      lastPressedButton = -1; // 清空，避免摇杆包轮询触发
     })
     .catch(() => {
       if (++consecutiveFails >= 3) updateConnectionStatus(false);
@@ -454,27 +476,43 @@ function updateConnectionStatus(connected) {
   if (connected) { dot.className='status-dot connected'; text.textContent='已连接'; text.style.color='#0f8'; }
   else           { dot.className='status-dot disconnected'; text.textContent='连接断开'; text.style.color='#f33'; }
 }
-
+/*======================== 油门位置重置 ========================*/
+function resetLeftStick(targetRawY) {
+  const knob     = document.getElementById('knob-left');
+  const joystick = document.getElementById('joystick-left');
+  const rect     = joystick.getBoundingClientRect();
+  if (rect.width === 0) return;
+  const radius = rect.width / 2 - 10;
+  const dy = -targetRawY / 100 * radius;
+  knob.style.transition = 'transform 0.3s ease-out';
+  knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${dy}px))`;
+  setTimeout(() => { knob.style.transition = ''; }, 300);
+  leftStick = {x:0, y:0, rawX:0, rawY: targetRawY};
+  processJoystickInput();
+  sendJoystickData();
+}
 /*======================== 按钮处理 ========================*/
 function handleButton(idx) {
   if (idx === 4) { toggleConsole(); return; }
   if (idx === 3) {
     // 模式循环：自稳(2)→特技(1)→定高(3)→自稳
+    // 不在点击时弹 toast，结果完全依赖后端 resp.m 确认后触发
     let nextBit;
     if (currentFlightMode === 2)      nextBit = 7; // STAB→ACRO
     else if (currentFlightMode === 1) nextBit = 8; // ACRO→ALTHOLD
     else                              nextBit = 6; // 其他→STAB
+    lastPressedButton = 3;
     sendButtonData(nextBit, 1);
     setTimeout(() => sendButtonData(nextBit, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 解锁/上锁/急停：脉冲模式，后端用上升沿检测
+  // 解锁/上锁/急停：点击时显示中间态，后端响应后覆盖为最终结果
   if (idx === 0 || idx === 1 || idx === 2) {
-    if (idx === 0 && currentValues.throttle > ARM_THROTTLE_LIMIT) {
-      showToast(`⚠️ 油门过高，无法解锁！请将油门降至${ARM_THROTTLE_LIMIT}%以下`);
-      return;
-    }
+    lastPressedButton = idx;
+    if (idx === 0)      showToast('🔓 解锁中...');
+    else if (idx === 1) showToast('🔒 上锁中...');
+    else if (idx === 2) showToast('🛑 急停指令发送中...');
     sendButtonData(idx, 1);
     setTimeout(() => sendButtonData(idx, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);

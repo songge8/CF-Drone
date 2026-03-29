@@ -24,6 +24,7 @@ bool webRCEnabled    = false;  // Web RC 当前有有效连接（由 readWebRC()
 bool useWebRC        = false;  // 当前正在使用 Web RC 控制（与 webRCEnabled 保持同步）
 bool webRCUpdated    = false;  // 收到过至少一次摇杆数据（首次连接前为 false）
 bool webConsoleEnabled = false; // Web 调试控制台开关：POST /console/enable 开启，开启后 print() 写入缓冲区
+static char webRCWarnMsg[64] = ""; // 待发送给前端的警告消息，发送一次后自动清空
 
 // ==================== 摇杆暂存值（供状态端点读取）====================
 // 单位：油门 0~100（%），姿态轴 ±30（°），按下=1/松开=0
@@ -240,6 +241,11 @@ bool handleJSONProtocol(String& body) {
     return true;
 }
 
+void setWebRCWarn(const char* msg) {
+    strncpy(webRCWarnMsg, msg, sizeof(webRCWarnMsg) - 1);
+    webRCWarnMsg[sizeof(webRCWarnMsg) - 1] = '\0';
+}
+
 // ==================== HTTP 请求处理 ====================
 
 void handleWebRCRequest() {
@@ -249,12 +255,21 @@ void handleWebRCRequest() {
     }
     String body = webRCServer.arg("plain");
     if (handleJSONProtocol(body)) {
-        char resp[128];
-        snprintf(resp, sizeof(resp),
-            "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d}",
-            netMonitor.getLatency(),
-            netMonitor.getPacketLossRate() / 10.0f,
-            mode, (int)armed);
+        char resp[256];
+        if (webRCWarnMsg[0]) {
+            snprintf(resp, sizeof(resp),
+                "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d,\"warn\":\"%s\"}",
+                netMonitor.getLatency(),
+                netMonitor.getPacketLossRate() / 10.0f,
+                mode, (int)armed, webRCWarnMsg);
+            webRCWarnMsg[0] = '\0'; // 发送后立即清空
+        } else {
+            snprintf(resp, sizeof(resp),
+                "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d}",
+                netMonitor.getLatency(),
+                netMonitor.getPacketLossRate() / 10.0f,
+                mode, (int)armed);
+        }
         webRCServer.send(200, "application/json", resp);
     } else {
         webRCServer.send(400, "application/json", "{\"e\":\"parse failed\"}");

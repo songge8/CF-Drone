@@ -507,14 +507,19 @@ function handleButton(idx) {
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 解锁/上锁/急停：点击时显示中间态，后端响应后覆盖为最终结果
+  // 解锁/上锁/急停：点击时显示中间态。
+  // lastPressedButton 必须在 state=0 发送前设置：
+  // state=1 的响应返回时 interpretWebRC 还未执行（armed 未变）；
+  // state=0 的响应返回时 armed 已由 control 循环更新，才是真实结果。
   if (idx === 0 || idx === 1 || idx === 2) {
-    lastPressedButton = idx;
     if (idx === 0)      showToast('🔓 解锁中...');
     else if (idx === 1) showToast('🔒 上锁中...');
     else if (idx === 2) showToast('🛑 急停指令发送中...');
     sendButtonData(idx, 1);
-    setTimeout(() => sendButtonData(idx, 0), 100);
+    setTimeout(() => {
+      lastPressedButton = idx; // 在 state=0 发出前标记，确保用 state=0 的响应判断结果
+      sendButtonData(idx, 0);
+    }, 100);
     if (navigator.vibrate) navigator.vibrate(30);
   }
 }

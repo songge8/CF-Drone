@@ -73,6 +73,9 @@ void pause(float duration) {
 #if WIFI_ENABLED
 		processMavlink();
 #endif
+#if WEB_RC_ENABLED
+		readWebRC(); // 保持 HTTP 服务器在长时间命令（ca/cr）期间持续响应
+#endif
 		delay(50);
 	}
 }

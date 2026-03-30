@@ -222,6 +222,7 @@ let lastButtonStates = new Array(16).fill(false);
 let lastPressedButton = -1; // 最近一次操作的按鈕编号，用于后端返回时判断结果 toast
 let consolePollingTimer = null;
 let consoleLastTotal    = 0;   // 增量拉取游标：已展示到第 N 行
+let consoleFetchInFlight = false; // 防并发：上次 fetch 未返回时跳过本次
 
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
@@ -556,7 +557,10 @@ function toggleConsole() {
 }
 
 function fetchConsoleLogs() {
+  if (consoleFetchInFlight) return;  // 上次未返回则跳过，防止并发重复追加
+  consoleFetchInFlight = true;
   fetch('/console?since=' + consoleLastTotal).then(r=>r.json()).then(data => {
+    consoleFetchInFlight = false;
     const out = document.getElementById('console-output');
     if (data.lines && data.lines.length > 0) {
       const frag = document.createDocumentFragment();
@@ -571,7 +575,7 @@ function fetchConsoleLogs() {
       // 限制 DOM 行数，避免长时间运行内存泄漏
       while (out.children.length > 200) out.removeChild(out.firstChild);
     }
-  }).catch(()=>{});
+  }).catch(()=>{ consoleFetchInFlight = false; });
 }
 
 function sendConsoleCmd() {

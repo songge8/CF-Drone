@@ -99,17 +99,19 @@ public:
 WebServer webRCServer(8080);
 
 // ==================== 控制台日志缓冲区 ====================
-#define CONSOLE_LINES    30
-#define CONSOLE_LINE_LEN 80
+#define CONSOLE_LINES    100
+#define CONSOLE_LINE_LEN 120
 static char consoleBuf[CONSOLE_LINES][CONSOLE_LINE_LEN];
 static int  consoleTail   = 0;
 static int  consoleFilled = 0;
+static int  consoleTotal  = 0;   // 单调递增总行数，用于增量拉取
 
 void webLog(const char* msg) {
     strncpy(consoleBuf[consoleTail], msg, CONSOLE_LINE_LEN - 1);
     consoleBuf[consoleTail][CONSOLE_LINE_LEN - 1] = '\0';
     consoleTail = (consoleTail + 1) % CONSOLE_LINES;
     if (consoleFilled < CONSOLE_LINES) consoleFilled++;
+    consoleTotal++;
 }
 
 // ==================== 摇杆处理 ====================
@@ -307,11 +309,23 @@ void setupWebRC() {
     webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);
 
     webRCServer.on("/console", HTTP_GET, []() {
-        String json = "{\"lines\":[";
-        int start = (consoleFilled < CONSOLE_LINES) ? 0 : consoleTail;
-        for (int i = 0; i < consoleFilled; i++) {
-            int idx = (start + i) % CONSOLE_LINES;
-            if (i > 0) json += ",";
+        int since = -1;
+        if (webRCServer.hasArg("since")) since = webRCServer.arg("since").toInt();
+
+        String json = "{\"total\":";
+        json += consoleTotal;
+        json += ",\"lines\":[";
+
+        // 计算实际可返回的起始行号
+        int sendFrom = (since >= 0 && since < consoleTotal)
+                       ? max(since, consoleTotal - consoleFilled)
+                       : consoleTotal - consoleFilled;
+
+        bool first = true;
+        for (int i = sendFrom; i < consoleTotal; i++) {
+            int idx = i % CONSOLE_LINES;
+            if (!first) json += ",";
+            first = false;
             json += "\"";
             String line = consoleBuf[idx];
             line.replace("\\", "\\\\");

@@ -221,6 +221,7 @@ let lastButtonStates = new Array(16).fill(false);
 
 let lastPressedButton = -1; // 最近一次操作的按鈕编号，用于后端返回时判断结果 toast
 let consolePollingTimer = null;
+let consoleLastTotal    = 0;   // 增量拉取游标：已展示到第 N 行
 
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
@@ -547,20 +548,33 @@ function toggleConsole() {
   if (open) { panel.style.flexDirection = 'column'; }
   if (btn) { open ? btn.classList.add('active') : btn.classList.remove('active'); }
   if (open) {
-    consolePollingTimer = setInterval(fetchConsoleLogs, 2000);
+    document.getElementById('console-output').innerHTML = '';
+    consoleLastTotal = 0;
+    fetch('/console/enable', {method:'POST'}).catch(()=>{});
+    consolePollingTimer = setInterval(fetchConsoleLogs, 500);
     fetchConsoleLogs();
   } else {
+    fetch('/console/disable', {method:'POST'}).catch(()=>{});
     clearInterval(consolePollingTimer);
     consolePollingTimer = null;
   }
 }
 
 function fetchConsoleLogs() {
-  fetch('/console').then(r=>r.json()).then(data => {
+  fetch('/console?since=' + consoleLastTotal).then(r=>r.json()).then(data => {
     const out = document.getElementById('console-output');
     if (data.lines && data.lines.length > 0) {
-      out.innerHTML = data.lines.map(l=>`<div>${l.replace(/</g,'&lt;')}</div>`).join('');
+      const frag = document.createDocumentFragment();
+      data.lines.forEach(l => {
+        const div = document.createElement('div');
+        div.textContent = l;
+        frag.appendChild(div);
+      });
+      out.appendChild(frag);
       out.scrollTop = out.scrollHeight;
+      consoleLastTotal = data.total;
+      // 限制 DOM 行数，避免长时间运行内存泄漏
+      while (out.children.length > 200) out.removeChild(out.firstChild);
     }
   }).catch(()=>{});
 }
@@ -569,9 +583,36 @@ function sendConsoleCmd() {
   const input = document.getElementById('console-input');
   const cmd = input.value.trim();
   if (!cmd) return;
+  input.value = '';
   fetch('/console/cmd', {method:'POST', headers:{'Content-Type':'text/plain'}, body:cmd})
-    .then(()=>{ input.value=''; fetchConsoleLogs(); }).catch(()=>{});
+    .then(() => {
+      fetchConsoleLogs();
+      setTimeout(fetchConsoleLogs, 300);
+      setTimeout(fetchConsoleLogs, 800);
+    }).catch(()=>{});
 }
+
+// 回车发送 + ↑/↓ 命令历史
+(function(){
+  const cmdHistory = [];
+  let historyIdx   = -1;
+  document.getElementById('console-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const v = this.value.trim();
+      if (v) { cmdHistory.unshift(v); if (cmdHistory.length > 20) cmdHistory.pop(); }
+      sendConsoleCmd();
+      historyIdx = -1;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIdx < cmdHistory.length - 1) { historyIdx++; this.value = cmdHistory[historyIdx]; }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIdx > 0) { historyIdx--; this.value = cmdHistory[historyIdx]; }
+      else { historyIdx = -1; this.value = ''; }
+    }
+  });
+})();
 
 /*======================== 事件绑定 ========================*/
 document.addEventListener('DOMContentLoaded', init);

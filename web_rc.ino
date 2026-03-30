@@ -107,11 +107,22 @@ static int  consoleFilled = 0;
 static int  consoleTotal  = 0;   // 单调递增总行数，用于增量拉取
 
 void webLog(const char* msg) {
-    strncpy(consoleBuf[consoleTail], msg, CONSOLE_LINE_LEN - 1);
-    consoleBuf[consoleTail][CONSOLE_LINE_LEN - 1] = '\0';
-    consoleTail = (consoleTail + 1) % CONSOLE_LINES;
-    if (consoleFilled < CONSOLE_LINES) consoleFilled++;
-    consoleTotal++;
+    // 按 \n 拆分写入，避免换行符污染 JSON
+    const char* start = msg;
+    while (*start) {
+        const char* end = strchr(start, '\n');
+        int len = end ? (int)(end - start) : (int)strlen(start);
+        if (len > 0) {
+            int copy = (len < CONSOLE_LINE_LEN - 1) ? len : (CONSOLE_LINE_LEN - 1);
+            strncpy(consoleBuf[consoleTail], start, copy);
+            consoleBuf[consoleTail][copy] = '\0';
+            consoleTail = (consoleTail + 1) % CONSOLE_LINES;
+            if (consoleFilled < CONSOLE_LINES) consoleFilled++;
+            consoleTotal++;
+        }
+        if (!end) break;
+        start = end + 1;
+    }
 }
 
 // ==================== 摇杆处理 ====================
@@ -328,8 +339,10 @@ void setupWebRC() {
             first = false;
             json += "\"";
             String line = consoleBuf[idx];
-            line.replace("\\", "\\\\");
-            line.replace("\"", "\\\"");
+            line.replace("\\", "\\\\");  // \ → \\
+            line.replace("\"", "\\\"");  // " → \"
+            line.replace("\n", "\\n");    // 兜底：换行 → \n
+            line.replace("\r", "\\r");    // 兜底：CR   → \r
             json += line + "\"";
         }
         json += "]}";

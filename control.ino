@@ -231,9 +231,10 @@ void interpretWebRC() {
 		mode = ACRO;
 	}
 
-	// 按鈕。8：ALTHOLD定高模式（上升沿）- 暂未实现
+	// 按鈕。8：ALTHOLD定高模式（上升沿）- 暂未实现，跳过定高切到STAB，避免前端模式循环卡死
 	if (risingEdge & 0x0100) {
-		setWebRCWarn("定高模式暂不支持");
+		mode = STAB;
+		setWebRCWarn("定高模式暂不支持，已切换为自稳");
 	}
 
 	// 模式切换日志

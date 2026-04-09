@@ -1,7 +1,4 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // Wi-Fi功能支持
-// Wi-Fi support
 
 #if WIFI_ENABLED
 

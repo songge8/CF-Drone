@@ -59,4 +59,5 @@ void loop() {
 #endif
 	logData();
 	syncParameters();
+	updateLED();
 }

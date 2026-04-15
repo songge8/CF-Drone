@@ -1,6 +1,8 @@
 // 故障安全保护
 // Fail-safe functions
 
+bool isInverted = false;  // 当前机身是否处于倒置（Z轴cos < INVERTED_COS_THRESHOLD）
+
 float rcLossTimeout = 1;        // RC丢失超时时间（秒），可通过参数 SF_RC_LOSS_TIME 配置
 float descendTime = 10;         // 下降至停机的时间（秒），可通过参数 SF_DESCEND_TIME 配置
 #define WEB_RC_LOSS_TIMEOUT_MS 8000UL  // Web遥控器失联阈值(ms)，必须大于心跳间隔2000ms
@@ -93,13 +95,17 @@ void webRCLossFailsafe() {
 
 // 倒置保护：机体Z轴与世界Z轴夹角超过120°持续1.5秒则停机
 void invertedFailsafe() {
-	if (!armed) return;
+	if (!armed) {
+		isInverted = false;
+		return;
+	}
 
 	// 取机体Z轴在世界系的Z分量：正立时≈+1，倒置时≈-1
 	Vector worldUp = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
 
 	static float invertedStartTime = 0;
 	if (worldUp.z < INVERTED_COS_THRESHOLD) {
+		isInverted = true;
 		if (invertedStartTime == 0) invertedStartTime = t;
 		if (t - invertedStartTime > INVERTED_TIMEOUT) {
 			armed = false;
@@ -107,6 +113,7 @@ void invertedFailsafe() {
 			print("倒置保护：停机\n");
 		}
 	} else {
+		isInverted = false;
 		invertedStartTime = 0;
 	}
 }

@@ -1,4 +1,3 @@
-// web_rc.ino
 // Web RC 服务端
 
 #if WEB_RC_ENABLED
@@ -15,9 +14,7 @@ extern float controlRoll, controlPitch, controlYaw, controlThrottle, controlMode
 
 // ==================== 配置常量 ====================
 #define WEB_RC_TIMEOUT_MS    10000          // 连接超时：最后一次收包超过此时间(ms)视为断连；需大于心跳间隔
-#define VBAT_ADC_PIN         36             // 电池电压采样引脚（GPIO36/VP，只读ADC）
-#define VBAT_ADC_SAMPLES     16             // ADC多次采样取均值，越大噪声越低、响应越慢
-#define VBAT_DIVIDER         (43.0f / 33.0f)// 分压比：上桥10kΩ+下桥33kΩ，公式 Vbat = Vadc × 43/33
+// VBAT_ADC_PIN / VBAT_ADC_SAMPLES / VBAT_DIVIDER 已迁移至 battery.ino
 
 // ==================== 连接状态标志 ====================
 bool webRCEnabled    = false;  // Web RC 当前有有效连接（由 readWebRC() 每帧更新）
@@ -291,12 +288,7 @@ void handleWebRCRequest() {
 }
 
 // ==================== 电池电压 ====================
-
-float readBatteryVoltage() {
-    long sum = 0;
-    for (int i = 0; i < VBAT_ADC_SAMPLES; i++) sum += analogRead(VBAT_ADC_PIN);
-    return (sum / (float)VBAT_ADC_SAMPLES / 4095.0f) * 3.3f * VBAT_DIVIDER;
-}
+// readBatteryVoltage() 已迁移至 battery.ino，此处直接调用即可
 
 // ==================== 连接状态 ====================
 

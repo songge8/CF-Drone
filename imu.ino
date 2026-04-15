@@ -1,5 +1,4 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
+// 陀螺仪加速度计相关设置
 // Work with the IMU sensor
 
 #include <SPI.h>
@@ -10,9 +9,15 @@
 
 MPU9250 imu(SPI);
 
+// IMU 安装方向（欧拉角，单位 rad）。默认值 (0, 0, -PI/2) 对应本 PCB 的安装方式：
+// 芯片正面朝上，X 丝印→飞行器右侧，Y 丝印→飞行器前方 → 转换公式 Vector(data.y, -data.x, data.z)
+// 如需适配其他安装方向，修改此值并执行 `preset` 重置参数存储。
+Vector imuRotation(0, 0, -PI / 2);
+
 Vector accBias;
 Vector accScale(1, 1, 1);
 Vector gyroBias;
+LowPassFilter<Vector> gyroBiasFilter(0.001); // 陀螺仪偏置低通估计滤波器
 
 void setupIMU() {
 	print("Setup IMU\n");
@@ -36,74 +41,44 @@ void readIMU() {
 	// apply scale and bias
 	acc = (acc - accBias) / accScale;
 	gyro = gyro - gyroBias;
-	// rotate
-	rotateIMU(acc);
-	rotateIMU(gyro);
+	// rotate to body frame using imuRotation Euler angles
+	Quaternion rotation = Quaternion::fromEuler(imuRotation);
+	acc  = Quaternion::rotateVector(acc,  rotation.inversed());
+	gyro = Quaternion::rotateVector(gyro, rotation.inversed());
 }
-
-// 在飞控中，我们通常使用FLU（Front-Left-Up）坐标系：
-  //- X轴：向前（Front，即飞行器前进方向）
-  //- Y轴：向左（Left）
-  //- Z轴：向上（Up）
-  //我的样机MPU6500安装方式是：
-  //- 芯片丝印朝上（即芯片正面朝上）
-  //- X丝印指向飞行器右侧
-  //- Y丝印指向飞行器前方
-  //安装方式与FLU坐标系的对应关系是：
-  //- 传感器Y轴(向前)对应FLU坐标系的X轴(向前）
-  //- 传感器X轴(向右)对应FLU坐标系的Y轴的反方向(因为FLU的Y轴向左,而传感器X轴向右,所以需要取反）
-  //- 传感器Z轴(向上)对应FLU坐标系的Z轴(向上),注意:芯片朝上安装,那么传感器的Z轴是朝上的,而FLU坐标系的Z轴也是朝上的,所以Z轴方向一致。
-  //如果你的IMU模块与我制作的样机不同，那么需要设置IMU的指向！
-
-void rotateIMU(Vector& data) {
-	// Rotate from LFD（Left-Forward-Up） to FLU（Front-Left-Up）
-  // PCB上IMU的安装 X=右, Y=前, Z=上 → 转换为 X=前, Y=左, Z=上
-	// NOTE: In case of using other IMU orientation, change this line:
-	data = Vector(data.y, -data.x, data.z);
-	// Axes orientation for various boards: https://github.com/okalachev/flixperiph#imu-axes-orientation
-}
-//所有旋转情况的完整映射表:（我让AI写的，仅供参考，请物理验证）
-//旋转角度	旋转方向	X轴最终方向	Y轴最终方向	转换公式
-//0°	无旋转	右 →	前 ↑	Vector(data.y, -data.x, data.z) 我设计的PCB上丝印就是这个方向！
-//90°	顺时针	下 ↓	右 →	Vector(-data.x, -data.y, data.z)
-//180°	顺时针	左 ←	后 ↓	Vector(-data.y, data.x, data.z)
-//270°	顺时针	上 ↑	左 ←	Vector(data.x, data.y, data.z)
-//90°	逆时针	上 ↑	左 ←	Vector(data.x, data.y, data.z)
-//270°	逆时针	下 ↓	右 →	Vector(-data.x, -data.y, data.z)
 
 void calibrateGyroOnce() {
 	static Delay landedDelay(2);
 	if (!landedDelay.update(landed)) return; // calibrate only if definitely stationary
 
-	static LowPassFilter<Vector> gyroBiasFilter(0.001);
 	gyroBias = gyroBiasFilter.update(gyro);
 }
 
 void calibrateAccel() {
-	print("校准陀螺仪加速计Calibrating accelerometer\n");
+	print("校准陀螺仪加速计 Calibrating accelerometer\n");
 	imu.setAccelRange(imu.ACCEL_RANGE_2G); // the most sensitive mode
 
-	print("1/6 水平放置[8 sec]将飞行器机头朝前（正常飞行方向），底部朝下水平放置在平坦表面，确保完全水平无倾斜\n");
+	print("1/6 水平放置：机头朝前（正常飞行方向），底部朝下水平放置在平坦表面，确保完全水平无倾斜。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
-	print("2/6 机头朝上[8 sec]保持机头朝前,将飞行器前端抬起约90°,使机头指向天空，尾部接触支撑面\n");
+	print("2/6 机头朝上：保持机头朝前,将飞行器前端抬起约90°,使机头指向天空，尾部接触支撑面。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
-	print("3/6 机头朝下[8 sec]机头朝前,将飞行器前端下压约90°,使机头指向地面，尾部朝上\n");
+	print("3/6 机头朝下：保持机头朝前,将飞行器前端下压约90°,使机头指向地面，尾部朝上。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
-	print("4/6 右侧朝下[8 sec]机头朝前,将飞行器整体向右侧倾斜,直至右侧机臂垂直向下,左侧机臂朝上,机身呈90°侧倾\n");
+	print("4/6 右侧朝下：保持机头朝前,将飞行器向右侧倾斜90°,右侧机臂垂直向下,左侧机臂朝上。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
-	print("5/6 左侧朝下[8 sec]与右侧相反，机头朝前时左侧机臂垂直向下，右侧朝上，保持机身稳定无晃动\n");
+	print("5/6 左侧朝下：保持机头朝前,与右侧相反，左侧机臂垂直向下，右侧朝上。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
-	print("6/6 倒置放置[8 sec]将飞行器完全翻转，顶部朝下、底部朝上，机头方向保持不变，整体呈水平倒置状态\n");
+	print("6/6 倒置放置：保持机头朝前,将飞行器完全翻转，顶部朝下、底部朝上，整体呈水平倒置状态。保持不动，8秒后开始校准\n");
 	pause(8);
 	calibrateAccelOnce();
 
 	printIMUCalibration();
-	print("✓校准完成Calibration done!\n");
+	print("✓校准完成 Calibration done!\n");
 	configureIMU();
 }
 

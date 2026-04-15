@@ -43,6 +43,7 @@
 const int RAW = 0, ACRO = 1, STAB = 2, ALTHOLD = 3, AUTO = 4; // flight modes
 int mode = STAB;
 bool armed = false;
+int flightModes[] = {STAB, STAB, STAB}; // RC模式拨杆三挡对应的飞行模式，可通过参数 CTL_FLT_MODE_0/1/2 配置
 
 #if WEB_RC_ENABLED
 extern uint16_t webRCButtons;
@@ -64,6 +65,7 @@ Vector torqueTarget;
 float thrustTarget;
 
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
+extern float motors[4];
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
 
 void control() {
@@ -78,9 +80,9 @@ void control() {
 }
 
 void interpretControls() {
-	if (controlMode < 0.25) mode = STAB;
-	if (controlMode < 0.75) mode = STAB;
-	if (controlMode > 0.75) mode = STAB;
+	if (controlMode < 0.25) mode = flightModes[0];
+	else if (controlMode < 0.75) mode = flightModes[1];
+	else if (controlMode > 0.75) mode = flightModes[2];
 
 	if (mode == AUTO) return; // pilot is not effective in AUTO mode
 

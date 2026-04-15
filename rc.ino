@@ -1,5 +1,3 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // 使用RC接收器
 // Work with the RC receiver
 
@@ -8,6 +6,7 @@
 
 SBUS rc(Serial2); // NOTE: Use RC(Serial2, 16, 17) if you use the old UART2 pins
 //SBUS RC(Serial2, 16, 17); 
+int rcRxPin = 16; // SBUS RX 引脚，-1 表示禁用 RC，可通过参数 RC_RX_PIN 配置
 uint16_t channels[16]; // raw rc channels
 float controlTime; // time of the last controls update
 float channelZero[16]; // calibration zero values
@@ -17,11 +16,13 @@ float channelMax[16]; // calibration max values
 float rollChannel = NAN, pitchChannel = NAN, throttleChannel = NAN, yawChannel = NAN, modeChannel = NAN;
 
 void setupRC() {
+	if (rcRxPin < 0) return; // Pin 未配置则跳过 RC 初始化
 	print("Setup RC\n");
-	rc.begin();
+	rc.begin(rcRxPin);
 }
 
 bool readRC() {
+	if (rcRxPin < 0) return false; // RC 未启用
 	if (rc.read()) {
 		SBUSData data = rc.data();
 		for (int i = 0; i < 16; i++) channels[i] = data.ch[i]; // copy channels data

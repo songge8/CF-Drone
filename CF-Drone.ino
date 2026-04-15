@@ -19,7 +19,6 @@ Vector acc; // accelerometer data, m/s/s
 Vector rates; // filtered angular rates, rad/s
 Quaternion attitude; // estimated attitude
 bool landed; // are we landed and stationary
-float motors[4]; // normalized motors thrust in range [0..1]
 
 void setup() {
 	Serial.begin(115200);

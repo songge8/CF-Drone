@@ -1,5 +1,3 @@
-// Copyright (c) 2024 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // 参数存储在闪存
 // Parameters storage in flash memory
 
@@ -8,14 +6,31 @@
 
 extern float channelZero[16];
 extern float channelMax[16];
-extern float rollChannel, pitchChannel, throttleChannel, yawChannel, armedChannel, modeChannel;
+extern float rollChannel, pitchChannel, throttleChannel, yawChannel, modeChannel;
+extern int wifiMode, udpLocalPort, udpRemotePort;
+extern int motorPins[4];
+extern int pwmFrequency, pwmResolution, pwmStop, pwmMin, pwmMax;
+extern int mavlinkSysId;
+extern Rate telemetrySlow, telemetryFast;
+extern float rcLossTimeout, descendTime;
+extern int flightModes[3];
+extern Vector accBias, accScale;
+extern Vector imuRotation;
+extern LowPassFilter<Vector> gyroBiasFilter;
+extern int rcRxPin;
 
 Preferences storage;
 
 struct Parameter {
 	const char *name; // max length is 15 (Preferences key limit)
-	float *variable;
-	float value; // cache
+	bool integer;
+	union { float *f; int *i; };
+	float cache; // what's stored in flash
+	void (*callback)(); // called after parameter change
+	Parameter(const char *name, float *variable, void (*callback)() = nullptr) : name(name), integer(false), f(variable), cache(0), callback(callback) {};
+	Parameter(const char *name, int *variable, void (*callback)() = nullptr) : name(name), integer(true), i(variable), cache(0), callback(callback) {};
+	float getValue() const { return integer ? *i : *f; }
+	void setValue(const float value) { if (integer) *i = (int)value; else *f = value; }
 };
 
 Parameter parameters[] = {
@@ -42,7 +57,14 @@ Parameter parameters[] = {
 	{"CTL_R_RATE_MAX", &maxRate.x},
 	{"CTL_Y_RATE_MAX", &maxRate.z},
 	{"CTL_TILT_MAX", &tiltMax},
+	{"CTL_FLT_MODE_0", &flightModes[0]},
+	{"CTL_FLT_MODE_1", &flightModes[1]},
+	{"CTL_FLT_MODE_2", &flightModes[2]},
 	// imu
+	{"IMU_ROT_ROLL",  &imuRotation.x},
+	{"IMU_ROT_PITCH", &imuRotation.y},
+	{"IMU_ROT_YAW",   &imuRotation.z},
+	{"IMU_GYRO_BIAS_A", &gyroBiasFilter.alpha},
 	{"IMU_ACC_BIAS_X", &accBias.x},
 	{"IMU_ACC_BIAS_Y", &accBias.y},
 	{"IMU_ACC_BIAS_Z", &accBias.z},
@@ -52,6 +74,16 @@ Parameter parameters[] = {
 	// estimate
 	{"EST_ACC_WEIGHT", &accWeight},
 	{"EST_RATES_LPF_A", &ratesFilter.alpha},
+	// motors
+	{"MOT_PIN_FL", &motorPins[MOTOR_FRONT_LEFT], setupMotors},
+	{"MOT_PIN_FR", &motorPins[MOTOR_FRONT_RIGHT], setupMotors},
+	{"MOT_PIN_RL", &motorPins[MOTOR_REAR_LEFT], setupMotors},
+	{"MOT_PIN_RR", &motorPins[MOTOR_REAR_RIGHT], setupMotors},
+	{"MOT_PWM_FREQ", &pwmFrequency, setupMotors},
+	{"MOT_PWM_RES", &pwmResolution, setupMotors},
+	{"MOT_PWM_STOP", &pwmStop},
+	{"MOT_PWM_MIN", &pwmMin},
+	{"MOT_PWM_MAX", &pwmMax},
 	// rc
 	{"RC_ZERO_0", &channelZero[0]},
 	{"RC_ZERO_1", &channelZero[1]},
@@ -74,17 +106,30 @@ Parameter parameters[] = {
 	{"RC_THROTTLE", &throttleChannel},
 	{"RC_YAW", &yawChannel},
 	{"RC_MODE", &modeChannel},
+	{"RC_RX_PIN", &rcRxPin},
+	// wifi
+	{"WIFI_MODE", &wifiMode},
+	{"WIFI_LOC_PORT", &udpLocalPort},
+	{"WIFI_REM_PORT", &udpRemotePort},
+	// mavlink
+	{"MAV_SYS_ID", &mavlinkSysId},
+	{"MAV_RATE_SLOW", &telemetrySlow.rate},
+	{"MAV_RATE_FAST", &telemetryFast.rate},
+	// safety
+	{"SF_RC_LOSS_TIME", &rcLossTimeout},
+	{"SF_DESCEND_TIME", &descendTime},
 };
 
 void setupParameters() {
+	print("Setup parameters\n");
 	storage.begin("flix", false);
 	// Read parameters from storage
 	for (auto &parameter : parameters) {
 		if (!storage.isKey(parameter.name)) {
-			storage.putFloat(parameter.name, *parameter.variable);
+			storage.putFloat(parameter.name, parameter.getValue()); // store default value
 		}
-		*parameter.variable = storage.getFloat(parameter.name, *parameter.variable);
-		parameter.value = *parameter.variable;
+		parameter.setValue(storage.getFloat(parameter.name, 0));
+		parameter.cache = parameter.getValue();
 	}
 }
 
@@ -99,13 +144,13 @@ const char *getParameterName(int index) {
 
 float getParameter(int index) {
 	if (index < 0 || index >= parametersCount()) return NAN;
-	return *parameters[index].variable;
+	return parameters[index].getValue();
 }
 
 float getParameter(const char *name) {
 	for (auto &parameter : parameters) {
-		if (strcmp(parameter.name, name) == 0) {
-			return *parameter.variable;
+		if (strcasecmp(parameter.name, name) == 0) {
+			return parameter.getValue();
 		}
 	}
 	return NAN;
@@ -113,8 +158,10 @@ float getParameter(const char *name) {
 
 bool setParameter(const char *name, const float value) {
 	for (auto &parameter : parameters) {
-		if (strcmp(parameter.name, name) == 0) {
-			*parameter.variable = value;
+		if (strcasecmp(parameter.name, name) == 0) {
+			if (parameter.integer && !isfinite(value)) return false; // can't set integer to NaN or Inf
+			parameter.setValue(value);
+			if (parameter.callback) parameter.callback();
 			return true;
 		}
 	}
@@ -127,16 +174,16 @@ void syncParameters() {
 	if (motorsActive()) return; // don't use flash while flying, it may cause a delay
 
 	for (auto &parameter : parameters) {
-		if (parameter.value == *parameter.variable) continue;
-		if (isnan(parameter.value) && isnan(*parameter.variable)) continue; // handle NAN != NAN
-		storage.putFloat(parameter.name, *parameter.variable);
-		parameter.value = *parameter.variable;
+		if (parameter.getValue() == parameter.cache) continue;
+		if (isnan(parameter.getValue()) && isnan(parameter.cache)) continue; // handle NAN != NAN
+		storage.putFloat(parameter.name, parameter.getValue());
+		parameter.cache = parameter.getValue();
 	}
 }
 
 void printParameters() {
 	for (auto &parameter : parameters) {
-		print("%s = %g\n", parameter.name, *parameter.variable);
+		print("%s = %g\n", parameter.name, parameter.getValue());
 	}
 }
 

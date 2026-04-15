@@ -1,9 +1,9 @@
 // 故障安全保护
 // Fail-safe functions
 
-#define RC_LOSS_TIMEOUT 1
+float rcLossTimeout = 1;        // RC丢失超时时间（秒），可通过参数 SF_RC_LOSS_TIME 配置
+float descendTime = 10;         // 下降至停机的时间（秒），可通过参数 SF_DESCEND_TIME 配置
 #define WEB_RC_LOSS_TIMEOUT_MS 8000UL  // Web遥控器失联阈值(ms)，必须大于心跳间隔2000ms
-#define DESCEND_TIME 10
 
 // 倒置保护参数
 #define INVERTED_COS_THRESHOLD -0.5f   // cos(120°)，倾角超过120°视为倒置
@@ -44,7 +44,7 @@ void rcLossFailsafe() {
 #if WEB_RC_ENABLED
 	if (isUsingWebRC()) return; // WebRC独立负责其超时（webRCLossFailsafe）
 #endif
-	if (t - controlTime > RC_LOSS_TIMEOUT) {
+	if (t - controlTime > rcLossTimeout) {
 		descend();
 	}
 }
@@ -53,7 +53,7 @@ void rcLossFailsafe() {
 void descend() {
 	mode = AUTO;
 	attitudeTarget = Quaternion();
-	thrustTarget -= dt / DESCEND_TIME;
+	thrustTarget -= dt / descendTime;
 	if (thrustTarget < 0) {
 		thrustTarget = 0;
 		armed = false;

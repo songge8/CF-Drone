@@ -1,22 +1,20 @@
-// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
-// Repository: https://github.com/okalachev/flix
 // 使用MOSFET的电机输出控制
-// 如果使用ESC，将PWM_STOP、PWM_MIN和PWM_MAX更改为适当的μs值，将PWM_FREQUENCY减小到400
+// 如果使用ESC，将pwmStop、pwmMin和pwmMax更改为适当的μs值，将pwmFrequency减小到400
 // Motors output control using MOSFETs
-// In case of using ESCs, change PWM_STOP, PWM_MIN and PWM_MAX to appropriate values in μs, decrease PWM_FREQUENCY (to 400)
+// In case of using ESCs, change pwmStop, pwmMin and pwmMax to appropriate values in μs, decrease pwmFrequency (to 400)
 
 #include "util.h"
 
-#define MOTOR_0_PIN 12 // RL左后rear left
-#define MOTOR_1_PIN 13 // RR右后rear right
-#define MOTOR_2_PIN 15 // FR右前front right
-#define MOTOR_3_PIN 14 // FL左前front left
+float motors[4]; // normalized motor thrusts in range [0..1]
 
-#define PWM_FREQUENCY 78000
-#define PWM_RESOLUTION 10
-#define PWM_STOP 0
-#define PWM_MIN 0
-#define PWM_MAX 1000000 / PWM_FREQUENCY
+// 电机引脚（对应 MOTOR_REAR_LEFT=0, MOTOR_REAR_RIGHT=1, MOTOR_FRONT_RIGHT=2, MOTOR_FRONT_LEFT=3）
+int motorPins[4] = {12, 13, 15, 14}; // RL, RR, FR, FL
+
+int pwmFrequency = 78000;
+int pwmResolution = 10;
+int pwmStop = 0;
+int pwmMin = 0;
+int pwmMax = -1; // -1 表示纯占空比模式（接 MOSFET 直驱）；接 ESC 时设为实际 PWM 最大值（μs）
 
 // Motors array indexes:
 const int MOTOR_REAR_LEFT = 0;
@@ -28,10 +26,10 @@ void setupMotors() {
 	print("Setup Motors\n");
 
 	// configure pins
-	ledcAttach(MOTOR_0_PIN, PWM_FREQUENCY, PWM_RESOLUTION);
-	ledcAttach(MOTOR_1_PIN, PWM_FREQUENCY, PWM_RESOLUTION);
-	ledcAttach(MOTOR_2_PIN, PWM_FREQUENCY, PWM_RESOLUTION);
-	ledcAttach(MOTOR_3_PIN, PWM_FREQUENCY, PWM_RESOLUTION);
+	for (int i = 0; i < 4; i++) {
+		ledcAttach(motorPins[i], pwmFrequency, pwmResolution);
+		pwmFrequency = ledcChangeFrequency(motorPins[i], pwmFrequency, pwmResolution); // when reconfiguring
+	}
 
 	sendMotors();
 	print("Motors initialized\n");
@@ -39,17 +37,20 @@ void setupMotors() {
 
 int getDutyCycle(float value) {
 	value = constrain(value, 0, 1);
-	float pwm = mapf(value, 0, 1, PWM_MIN, PWM_MAX);
-	if (value == 0) pwm = PWM_STOP;
-	float duty = mapf(pwm, 0, 1000000 / PWM_FREQUENCY, 0, (1 << PWM_RESOLUTION) - 1);
-	return round(duty);
+	if (pwmMax >= 0) { // pwm 时间模式（接 ESC 用）
+		float pwm = mapf(value, 0, 1, pwmMin, pwmMax);
+		if (value == 0) pwm = pwmStop;
+		float duty = mapf(pwm, 0, 1000000 / pwmFrequency, 0, (1 << pwmResolution) - 1);
+		return round(duty);
+	} else { // 纯占空比模式（接 MOSFET 直驱用）
+		return round(value * ((1 << pwmResolution) - 1));
+	}
 }
 
 void sendMotors() {
-	ledcWrite(MOTOR_0_PIN, getDutyCycle(motors[0]));
-	ledcWrite(MOTOR_1_PIN, getDutyCycle(motors[1]));
-	ledcWrite(MOTOR_2_PIN, getDutyCycle(motors[2]));
-	ledcWrite(MOTOR_3_PIN, getDutyCycle(motors[3]));
+	for (int i = 0; i < 4; i++) {
+		ledcWrite(motorPins[i], getDutyCycle(motors[i]));
+	}
 }
 
 bool motorsActive() {

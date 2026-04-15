@@ -3,6 +3,9 @@
 #include "pid.h"
 #include "vector.h"
 #include "util.h"
+#include "lpf.h"
+
+extern LowPassFilter<Vector> gyroBiasFilter;
 
 #if WEB_RC_ENABLED
 extern bool webConsoleEnabled;
@@ -12,25 +15,20 @@ extern void webLog(const char* msg);
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
 extern const int RAW, ACRO, STAB, AUTO;
 extern float t, dt, loopRate;
+extern float controlTime;
 extern uint16_t channels[16];
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
+extern float motors[4];
 extern int mode;
 extern bool armed;
 
 const char* motd =
-"\nWelcome to\n"
-"                                      \n"
-"    /\\      /\\      /\\      /\\    \n"
-"   /  \\    /  \\    /  \\    /  \\   \n"
-"  /__M_\\  /__i_\\  /__n_\\  /__i_\\  \n"
-" /   F  \\/   L  \\/   i  \\/   x  \\ \n"
-"/________\\_______\\_______\\_______\\ \n"
-"                                       \n"
 "输入命令，然后回车:\n"
 "help - 帮助show help\n"
 "p - 显示所有参数\n"
 "p <name> - 显示指定参数\n"
 "p <name> <value> - 设置参数\n"
+"p MOT_PIN_FL 14 - 设置示例，前左电机引脚为14\n"
 "preset - 重置参数reset\n"
 "mfr, mfl, mrr, mrl - 测试马达 (为了安全不要装桨叶！！！)\n"
 "cr - 校准RC遥控calibrate RC\n"
@@ -41,6 +39,8 @@ const char* motd =
 "imu - 显示IMU数据\n"
 "time - 显示时间信息\n"
 "wifi - 显示Wi-Fi显示\n"
+"ap - <ssid> <password> - 配置AP模式SSID和密码\n"
+"sta - <ssid> <password> - 配置STA客户端模式\n"
 "mot - 显示motor输出\n"
 "sys - 显示系统info信息\n"
 "raw/stab/acro/auto - 飞行模式设定\n"
@@ -103,7 +103,7 @@ void doCommand(String str, bool echo = false) {
 	} else if (command == "p") {
 		bool success = setParameter(arg0.c_str(), arg1.toFloat());
 		if (success) {
-			print("%s = %g\n", arg0.c_str(), arg1.toFloat());
+			print("%s = %g\n", arg0.c_str(), getParameter(arg0.c_str()));
 		} else {
 			print("Parameter not found: %s\n", arg0.c_str());
 		}
@@ -141,11 +141,20 @@ void doCommand(String str, bool echo = false) {
 		}
 		print("\nroll: %g pitch: %g yaw: %g throttle: %g mode: %g\n",
 			controlRoll, controlPitch, controlYaw, controlThrottle, controlMode);
+		print("time: %.1f\n", controlTime);
 		print("mode: %s\n", getModeName());
 		print("armed: %d\n", armed);
 	} else if (command == "wifi") {
 #if WIFI_ENABLED
 		printWiFiInfo();
+#endif
+	} else if (command == "ap") {
+#if WIFI_ENABLED
+		configWiFi(true, arg0.c_str(), arg1.c_str());
+#endif
+	} else if (command == "sta") {
+#if WIFI_ENABLED
+		configWiFi(false, arg0.c_str(), arg1.c_str());
 #endif
 	} else if (command == "mot") {
 		print("front-right %g front-left %g rear-right %g rear-left %g\n",
@@ -186,6 +195,7 @@ void doCommand(String str, bool echo = false) {
 #endif
 	} else if (command == "reset") {
 		attitude = Quaternion();
+		gyroBiasFilter.reset();
 	} else if (command == "reboot") {
 		ESP.restart();
 	} else {

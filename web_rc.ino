@@ -76,8 +76,9 @@ public:
     }
     void update(unsigned long jsTs, uint16_t bytes = 0) {
         unsigned long now = millis();
-        if (now - lastReceived > 150) packetLoss++;
-        if (jsTs > 0) avgLatency = (avgLatency * 9 + (uint16_t)(now - jsTs)) / 10;
+        // 仅当间隔超过心跳周期（2000ms）的1.5倍时才计为丢包，避免正常心跳被误计
+        if (packetCount > 0 && now - lastReceived > 3000) packetLoss++;
+        // avgLatency 不在 ESP32 侧计算：millis() 与 performance.now() 时钟基准不同，相减无意义
         if (bytes > 0) {
             totalBytesReceived += bytes;
             if (now - lastByteCountTime >= 1000) {

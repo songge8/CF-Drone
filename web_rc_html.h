@@ -200,13 +200,15 @@ let connectionOk = false;
 let packetStats = { sent: 0, lost: 0 };
 let latencyHistory = new Array(10).fill(0);
 let latencyIndex = 0;
-const SEND_INTERVAL = 100; // ~10Hz
+const SEND_INTERVAL = 50;  // ~20Hz 摇杆检测频率
+const FORCE_SEND_INTERVAL = 200; // 静止时强制重发间隔（ms），保持飞控数据新鲜
 
 const touches = new Map();
 let leftStick  = {x:0, y:0, rawX:0, rawY:-100};
 let rightStick = {x:0, y:0, rawX:0, rawY:0};
 
 let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
+let lastForceSentTime = 0; // 上次强制重发的时间戳（performance.now()）
 let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 const MIN_CHANGE_THRESHOLD = 0.5;
 
@@ -332,7 +334,12 @@ function hasSignificantChange(nv) {
 }
 
 function checkAndSendChanges() {
-  if (hasSignificantChange(currentValues)) sendJoystickData();
+  const now = performance.now();
+  // 有变化立即发；或超过强制重发间隔时也发一次（保持飞控侧数据新鲜，避免超时断连）
+  if (hasSignificantChange(currentValues) || (now - lastForceSentTime >= FORCE_SEND_INTERVAL)) {
+    sendJoystickData();
+    lastForceSentTime = now;
+  }
   for (let i = 0; i < buttonStates.length; i++) {
     if (buttonStates[i] !== lastButtonStates[i]) {
       sendButtonData(i, buttonStates[i]);

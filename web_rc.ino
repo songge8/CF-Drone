@@ -1,4 +1,4 @@
-// Web RC 服务端
+// 网页遥控服务端
 
 #if WEB_RC_ENABLED
 

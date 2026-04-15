@@ -1,5 +1,4 @@
-// web_rc_html.h
-// Web RC HTML页面定义 - 基础版（无气压定高）
+// 网页遥控器客户端界面
 
 #if WEB_RC_ENABLED
 

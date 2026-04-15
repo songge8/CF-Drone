@@ -1,5 +1,4 @@
 // Wi-Fi功能支持
-// Wi-Fi support
 
 #if WIFI_ENABLED
 

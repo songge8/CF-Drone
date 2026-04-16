@@ -58,41 +58,6 @@ static float lastValidPitch    = 0.0f;     // 上次通过验证的俯仰值
 static float lastValidYaw      = 0.0f;     // 上次通过验证的偏航值
 static unsigned long lastDataErrorTime = 0; // 上次数据异常时间，用于限速错误日志输出
 
-// ==================== 网络监控 ====================
-static uint32_t totalBytesReceived = 0;  // 累计接收字节数，用于计算实时带宽（bps）
-
-class NetworkMonitor {
-    unsigned long lastReceived, lastByteCountTime;
-    uint16_t packetLoss, packetCount;
-    uint16_t avgLatency;
-    uint32_t bytesPerSecond, lastByteCount;
-public:
-    NetworkMonitor() : packetLoss(0), packetCount(0), avgLatency(0),
-                       bytesPerSecond(0), lastByteCount(0) {
-        lastReceived = lastByteCountTime = millis();
-    }
-    void update(unsigned long jsTs, uint16_t bytes = 0) {
-        unsigned long now = millis();
-        // 仅当间隔超过心跳周期（2000ms）的1.5倍时才计为丢包，避免正常心跳被误计
-        if (packetCount > 0 && now - lastReceived > 3000) packetLoss++;
-        // avgLatency 不在 ESP32 侧计算：millis() 与 performance.now() 时钟基准不同，相减无意义
-        if (bytes > 0) {
-            totalBytesReceived += bytes;
-            if (now - lastByteCountTime >= 1000) {
-                bytesPerSecond    = totalBytesReceived - lastByteCount;
-                lastByteCount     = totalBytesReceived;
-                lastByteCountTime = now;
-            }
-        }
-        lastReceived = now;
-        packetCount++;
-    }
-    uint16_t getLatency()        const { return avgLatency; }
-    uint16_t getPacketLossRate() const { return packetCount ? (packetLoss * 1000) / packetCount : 0; }
-    uint32_t getPacketCount()    const { return packetCount; }
-    uint32_t getBytesPerSecond() const { return bytesPerSecond; }
-} netMonitor;
-
 // ==================== Web 服务器 ====================
 WebServer webRCServer(8080);
 
@@ -187,7 +152,7 @@ void setWebRCInput(float roll, float pitch, float yaw, float throttle, uint16_t 
 
     static unsigned long lastPrint = 0;
     static float lastPrintedThrottle = -1.0f;
-    if (millis() - lastPrint > 500 || fabsf(pThrottle - lastPrintedThrottle) > 5.0f) {
+    if (millis() - lastPrint > 30000 || fabsf(pThrottle - lastPrintedThrottle) > 5.0f) {
         print("WebRC T=%.0f%% R=%.1f P=%.1f Y=%.1f Btn=0x%04X\n",
               pThrottle, pRoll, pPitch, pYaw, buttons);
         lastPrintedThrottle = pThrottle;
@@ -225,7 +190,6 @@ bool handleJSONProtocol(String& body) {
             if ((v = findJsonValue(json, "\"y\"")))  y  = atof(v);
             if ((v = findJsonValue(json, "\"ts\""))) ts = atol(v);
             setWebRCInput(r, p, y, th, webRCButtons);
-            netMonitor.update(ts);
             break;
         }
         case 2: { // 按钮事件
@@ -240,11 +204,9 @@ bool handleJSONProtocol(String& body) {
                 webRCLastUpdate = millis();
                 webRCUpdated    = true;
             }
-            netMonitor.update(ts, body.length());
             break;
         }
         case 4: // 心跳
-            netMonitor.update(0, body.length());
             webRCLastUpdate = millis();
             webRCUpdated    = true;
             break;
@@ -269,16 +231,12 @@ void handleWebRCRequest() {
         char resp[256];
         if (webRCWarnMsg[0]) {
             snprintf(resp, sizeof(resp),
-                "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d,\"warn\":\"%s\"}",
-                netMonitor.getLatency(),
-                netMonitor.getPacketLossRate() / 10.0f,
+                "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"warn\":\"%s\"}",
                 mode, (int)armed, webRCWarnMsg);
             webRCWarnMsg[0] = '\0'; // 发送后立即清空
         } else {
             snprintf(resp, sizeof(resp),
-                "{\"s\":\"ok\",\"l\":%u,\"pl\":%.1f,\"m\":%d,\"arm\":%d}",
-                netMonitor.getLatency(),
-                netMonitor.getPacketLossRate() / 10.0f,
+                "{\"s\":\"ok\",\"m\":%d,\"arm\":%d}",
                 mode, (int)armed);
         }
         webRCServer.send(200, "application/json", resp);
@@ -371,15 +329,11 @@ void setupWebRC() {
         snprintf(json, sizeof(json),
             "{\"enabled\":%s,\"active\":%s,"
             "\"voltage\":%.2f,"
-            "\"throttle\":%.1f,\"roll\":%.1f,\"pitch\":%.1f,\"yaw\":%.1f,"
-            "\"latency\":%u,\"loss_rate\":%.1f,\"packets\":%lu}",
+            "\"throttle\":%.1f,\"roll\":%.1f,\"pitch\":%.1f,\"yaw\":%.1f}",
             isWebRCEnabled() ? "true" : "false",
             isUsingWebRC()   ? "true" : "false",
             vbat,
-            webRCThrottle, webRCRoll, webRCPitch, webRCYaw,
-            netMonitor.getLatency(),
-            netMonitor.getPacketLossRate() / 10.0f,
-            (unsigned long)netMonitor.getPacketCount());
+            webRCThrottle, webRCRoll, webRCPitch, webRCYaw);
         webRCServer.send(200, "application/json", json);
     });
 
@@ -398,14 +352,6 @@ void readWebRC() {
         webRCEnabled = useWebRC = true;
     } else {
         webRCEnabled = useWebRC = false;
-    }
-    static unsigned long lastLog = 0;
-    if (millis() - lastLog > 30000) {
-        print("WebRC 延迟=%ums 丢包=%.1f%% 包数=%lu\n",
-              netMonitor.getLatency(),
-              netMonitor.getPacketLossRate() / 10.0f,
-              (unsigned long)netMonitor.getPacketCount());
-        lastLog = millis();
     }
 }
 

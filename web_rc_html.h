@@ -8,7 +8,7 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>无人机遥控器</title>
+<title>琛光无人机遥控器</title>
 <style>
 /*======== 响应式变量 ========*/
 :root{
@@ -137,13 +137,17 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   .button{font-size:0.68rem;padding:5px 3px}
   .button-icon{font-size:0.88rem;margin-bottom:2px}
 }
+/*======== 版权页脚 ========*/
+.footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:1px 0;flex-shrink:0;line-height:1.4}
+.footer a{color:rgba(255,255,255,.3);text-decoration:none}
+.footer a:hover{color:rgba(255,255,255,.55)}
 </style>
 </head>
 <body>
 <div class="container">
   <!-- 顶部状态栏 -->
   <div class="header">
-    <h1>无人机 WEB RC 遥控器</h1>
+    <h1>琛光无人机网页遥控器</h1>
     <div class="status-bar">
       <div class="status-item"><span class="status-dot" id="status-dot"></span><span id="connection-text">连接中...</span></div>
       <div class="status-item" id="armed-status-item" style="background:rgba(255,51,51,0.15)"><span id="armed-status" style="color:#ff6666">已上锁</span></div>
@@ -190,6 +194,8 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
       <button onclick="sendConsoleCmd()" style="background:#1a73e8;border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:0.7rem;cursor:pointer;touch-action:auto">发送</button>
     </div>
   </div>
+  <!-- 版权页脚 -->
+  <div class="footer">琛光® CF-Drone &nbsp;|&nbsp; <a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">开源地址 oshwhub.com</a></div>
 </div>
 
 <script>

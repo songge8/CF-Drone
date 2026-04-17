@@ -1,7 +1,8 @@
 ESP32无人机飞控固件
+适用ESP32 + 6500/9250姿态传感器的飞控
 
 # 硬件资料
-嘉立创开源平台工程链接：https://oshwhub.com/songge8/project_qqqyfdkm
+完美适配琛光E1系列无人机，嘉立创开源平台工程链接：https://oshwhub.com/songge8/project_qqqyfdkm
 
 # 更新日志
 

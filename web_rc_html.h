@@ -138,7 +138,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   .button-icon{font-size:0.88rem;margin-bottom:2px}
 }
 /*======== 版权页脚 ========*/
-.footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:1px 0;flex-shrink:0;line-height:1.4}
+.footer{text-align:center;font-size:0.6rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:1;}
 .footer a{color:rgba(255,255,255,.3);text-decoration:none}
 .footer a:hover{color:rgba(255,255,255,.55)}
 </style>
@@ -195,7 +195,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
     </div>
   </div>
   <!-- 版权页脚 -->
-  <div class="footer">琛光® CF-Drone &nbsp;|&nbsp; <a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">开源地址 oshwhub.com</a></div>
+  <div class="footer"><a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">琛光无人机项目开源地址</a></div>
 </div>
 
 <script>

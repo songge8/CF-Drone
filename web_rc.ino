@@ -62,8 +62,8 @@ static unsigned long lastDataErrorTime = 0; // 上次数据异常时间，用于
 WebServer webRCServer(8080);
 
 // ==================== 控制台日志缓冲区 ====================
-#define CONSOLE_LINES    100
-#define CONSOLE_LINE_LEN 120
+#define CONSOLE_LINES    50
+#define CONSOLE_LINE_LEN 240
 static char consoleBuf[CONSOLE_LINES][CONSOLE_LINE_LEN];
 static int  consoleTail   = 0;
 static int  consoleFilled = 0;

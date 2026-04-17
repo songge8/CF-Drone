@@ -47,8 +47,8 @@ const char* motd =
 "mot - 显示motor输出\n"
 "sys - 显示系统info信息\n"
 "log [dump] - 打印日志\n"
-"reboot - 重启无人机\n";
-"reset - 重置无人机\n"
+"reboot - 重启无人机\n"
+"reset - 重置无人机\n";
 
 void print(const char* format, ...) {
 	char buf[1000];

@@ -3,10 +3,10 @@
 
 #include <SBUS.h>
 #include "util.h"
+#include "board_config.h"
 
-SBUS rc(Serial2); // NOTE: Use RC(Serial2, 16, 17) if you use the old UART2 pins
-//SBUS RC(Serial2, 16, 17); 
-int rcRxPin = 4; // SBUS RX 引脚，-1 表示禁用 RC，可通过参数 RC_RX_PIN 配置
+SBUS rc(BOARD_RC_SERIAL); // Serial2 on ESP32, Serial1 on ESP32-C3
+int rcRxPin = BOARD_RC_RX_PIN; // SBUS RX 引脚，-1 表示禁用 RC，可通过参数 RC_RX_PIN 配置
 uint16_t channels[16]; // raw rc channels
 float controlTime; // time of the last controls update
 float channelZero[16]; // calibration zero values

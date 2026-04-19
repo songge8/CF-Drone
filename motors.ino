@@ -4,11 +4,12 @@
 // In case of using ESCs, change pwmStop, pwmMin and pwmMax to appropriate values in μs, decrease pwmFrequency (to 400)
 
 #include "util.h"
+#include "board_config.h"
 
 float motors[4]; // normalized motor thrusts in range [0..1]
 
 // 电机引脚（对应 MOTOR_REAR_LEFT=0, MOTOR_REAR_RIGHT=1, MOTOR_FRONT_RIGHT=2, MOTOR_FRONT_LEFT=3）
-int motorPins[4] = {12, 13, 15, 14}; // RL, RR, FR, FL
+int motorPins[4] = BOARD_MOTOR_PINS; // RL, RR, FR, FL
 
 int pwmFrequency = 78000;
 int pwmResolution = 10;

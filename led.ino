@@ -3,6 +3,10 @@
 // 板载LED灯控制
 // Board's LED control
 
+#include "board_config.h"
+
+#if BOARD_LED_ENABLED
+
 #define BLINK_PERIOD      500000  // 慢闪：500ms 半周期 → 1 Hz
 #define BLINK_FAST_PERIOD  62500  // 快闪：62.5ms 半周期 → 8 Hz
 
@@ -78,3 +82,11 @@ void updateLED() {
 		setLED(micros() / BLINK_PERIOD % 2); // 正常飞行：慢闪 1Hz
 	}
 }
+
+#else // BOARD_LED_ENABLED == 0（ESP32-C3 无板载 LED）
+
+void setupLED() {}
+void setLED(bool on) {}
+void updateLED() {}
+
+#endif // BOARD_LED_ENABLED

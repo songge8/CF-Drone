@@ -6,8 +6,10 @@
 #pragma once
 
 #include <math.h>
+#ifdef CONFIG_IDF_TARGET_ESP32
 #include <soc/soc.h>
 #include <soc/rtc_cntl_reg.h>
+#endif
 
 const float ONE_G = 9.80665;
 extern float t;
@@ -37,7 +39,10 @@ float wrapAngle(float angle) {
 
 // Disable reset on low voltage
 void disableBrownOut() {
+#ifdef CONFIG_IDF_TARGET_ESP32
 	REG_CLR_BIT(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_BROWN_OUT_ENA);
+#endif
+	// ESP32-C3 欠压复位阈值通过 menuconfig 配置，无需代码操作
 }
 
 // Trim and split string by spaces

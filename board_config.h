@@ -16,16 +16,16 @@
 
 // ---- RC 串口（SBUS）----
 // ESP32-C3 无 Serial2，使用 Serial1；引脚可重映射至任意 GPIO
+// GPIO9 为 Boot 按键（内置上拉），SBUS 信号由接收机驱动，不影响正常使用
 #define BOARD_RC_SERIAL    Serial1
-#define BOARD_RC_RX_PIN    10
+#define BOARD_RC_RX_PIN    9
 
-// ---- IMU SPI（全部使用 ESP32-C3 硬件默认引脚，无需软件重映射）----
-// SCK=6（默认），MISO=2（默认），MOSI=7（默认）
-// CS=9（默认 SS 为 GPIO10，已被 SBUS 占用，改用 GPIO9，内置上拉，空闲高 = CS 正确空闲态）
+// ---- IMU SPI（全部使用 ESP32-C3 硬件默认引脚）----
+// SCK=6（默认），MISO=2（默认），MOSI=7（默认），CS=10（默认 SS）
 #define BOARD_SPI_SCK      6
 #define BOARD_SPI_MISO     2
 #define BOARD_SPI_MOSI     7
-#define BOARD_SPI_CS       9
+#define BOARD_SPI_CS       10
 
 // ---- LED：ESP32-C3 Mini 无板载 LED，禁用以节省引脚 ----
 #define BOARD_LED_ENABLED  0

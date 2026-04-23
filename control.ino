@@ -40,6 +40,8 @@
 #define ARM_THROTTLE_LIMIT   0.05f  // 解锁油门上限（归一化后 0~1），5%，超过此值禁止解锁
 #define RATES_D_LPF_ALPHA 0.2 // cutoff frequency ~ 40 Hz
 
+float idleThrust = 0.1f;  // 解锁后怠速推力，默认 0.1，可通过参数 MOT_IDLE_THRUST 调节
+
 const int RAW = 0, ACRO = 1, STAB = 2, ALTHOLD = 3, AUTO = 4; // flight modes
 int mode = STAB;
 bool armed = false;
@@ -157,10 +159,10 @@ void controlTorque() {
 	}
 
 	if (thrustTarget < 0.1) {
-		motors[0] = 0.1; // idle thrust
-		motors[1] = 0.1;
-		motors[2] = 0.1;
-		motors[3] = 0.1;
+		motors[0] = idleThrust; // idle thrust
+		motors[1] = idleThrust;
+		motors[2] = idleThrust;
+		motors[3] = idleThrust;
 		return;
 	}
 

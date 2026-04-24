@@ -8,7 +8,7 @@ float descendTime = 10;         // 下降至停机的时间（秒），可通过
 #define WEB_RC_LOSS_TIMEOUT_MS 8000UL  // Web遥控器失联阈值(ms)，必须大于心跳间隔2000ms
 
 // 倒置保护参数
-#define INVERTED_COS_THRESHOLD -0.5f   // cos(120°)，倾角超过120°视为倒置
+#define INVERTED_COS_THRESHOLD -0.7f   // cos(134°)，倾角超过134°视为倒置（留出陀螺漂移裕量）
 #define INVERTED_TIMEOUT        1.5f   // 持续倒置超过1.5秒触发停机
 
 extern float controlTime;
@@ -110,6 +110,7 @@ void invertedFailsafe() {
 		if (t - invertedStartTime > INVERTED_TIMEOUT) {
 			armed = false;
 			thrustTarget = 0.0f;
+			invertedStartTime = 0;
 			print("倒置保护：停机\n");
 		}
 	} else {

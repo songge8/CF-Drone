@@ -2,7 +2,7 @@
 
 // 板级硬件配置
 // Board-level hardware configuration
-// 通过条件编译自动区分 ESP32 与 ESP32-C3，无需手动修改
+// 通过条件编译自动区分 ESP32、ESP32-C3 与 ESP32-S3，无需手动修改
 
 #ifdef CONFIG_IDF_TARGET_ESP32C3
 
@@ -29,6 +29,28 @@
 
 // ---- LED：ESP32-C3 Mini 无板载 LED，禁用以节省引脚 ----
 #define BOARD_LED_ENABLED  0
+
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)  // ---- ESP32-S3 配置 ----
+
+// ---- 电机引脚：GPIO4-7，远离 FSPI 区（GPIO10-13），无 Strapping 约束 ----
+#define BOARD_MOTOR_PINS   {4, 5, 6, 7}    // RL=GPIO4, RR=GPIO5, FR=GPIO6, FL=GPIO7
+
+// ---- 电池 ADC：GPIO1（ADC1_CH0，S3 的 ADC1 范围为 GPIO1-10）----
+#define BOARD_VBAT_ADC_PIN 1
+
+// ---- RC 串口（SBUS）：GPIO8，与 FSPI/UART0 无冲突 ----
+#define BOARD_RC_SERIAL    Serial2
+#define BOARD_RC_RX_PIN    8
+
+// ---- IMU SPI：使用 ESP32-S3 FSPI 默认管脚 ----
+// SCK=12（默认），MISO=13（默认），MOSI=11（默认），CS=10（默认 SS）
+#define BOARD_SPI_SCK      12
+#define BOARD_SPI_MISO     13
+#define BOARD_SPI_MOSI     11
+#define BOARD_SPI_CS       10
+
+// ---- LED：新 PCB 接 GPIO2 普通 LED，驱动方式与 ESP32 相同 ----
+#define BOARD_LED_ENABLED  1
 
 #else  // ---- ESP32 默认配置 ----
 

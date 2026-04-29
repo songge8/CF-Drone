@@ -69,6 +69,7 @@ float thrustTarget;
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
 extern float motors[4];
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
+extern float batteryVoltage;  // battery.ino
 
 void control() {
 	interpretControls();
@@ -91,7 +92,24 @@ void interpretControls() {
 #if WEB_RC_ENABLED
 	if (!isUsingWebRC()) { // SBUS手势解锁仅当WebRC未活跃时生效
 #endif
-	if (controlThrottle < 0.05 && controlYaw > 0.95) armed = true; // arm gesture
+	static bool armWarnNotified = false;  // 防刷屏：低电禁止解锁提示
+	if (controlThrottle < 0.05 && controlYaw > 0.95) { // arm gesture
+		if (batteryVoltage > VBAT_ABSENT_THRESHOLD && batteryVoltage < VBAT_WARN_THRESHOLD) {
+			// L1 及以下：禁止解锁，状态变化时提示
+			if (!armWarnNotified) {
+				print("电量低(%.2fV)，禁止解锁\n", batteryVoltage);
+#if WEB_RC_ENABLED
+				char warnBuf[64];
+				snprintf(warnBuf, sizeof(warnBuf), "电量低(%.2fV) 禁止解锁", batteryVoltage);
+				setWebRCWarn(warnBuf);
+#endif
+				armWarnNotified = true;
+			}
+		} else {
+			armed = true;
+			armWarnNotified = false; // 换新电池后重置
+		}
+	}
 	if (controlThrottle < 0.05 && controlYaw < -0.95) armed = false; // disarm gesture
 #if WEB_RC_ENABLED
 	}

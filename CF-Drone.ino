@@ -51,6 +51,7 @@ void loop() {
 	readWebRC();  // 读取Web遥控器输入
 #endif
 	estimate();
+	updateBatteryVoltage();
 	control();
 	sendMotors();
 	handleInput();

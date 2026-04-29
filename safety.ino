@@ -27,6 +27,7 @@ extern int mode;
 extern float dt;
 extern float thrustTarget;
 extern float t;
+extern float batteryVoltage;  // battery.ino
 extern Quaternion attitudeTarget;
 extern Quaternion attitude;
 
@@ -37,6 +38,7 @@ void failsafe() {
 #endif
 	autoFailsafe();
 	invertedFailsafe();
+	batteryFailsafe();
 }
 
 // RC loss failsafe
@@ -116,5 +118,52 @@ void invertedFailsafe() {
 	} else {
 		isInverted = false;
 		invertedStartTime = 0;
+	}
+}
+
+// 电池电压保护
+// L1（3.4V）：未解锁禁止解锁（在 control.ino 处理），怠速时自动上锁
+// L2（2.8V）：飞行中仅 LED 快闪告警
+// L3（2.6V）：飞行中自动降落（复用 descend()，速度由 SF_DESCEND_TIME 控制）
+void batteryFailsafe() {
+	if (batteryVoltage < VBAT_ABSENT_THRESHOLD) return; // 未接电池，忽略
+
+	// --- 飞行中：仅检查 L2/L3，L1 不适用（带载电压天然偏低）---
+	if (armed && thrustTarget >= 0.15f) {
+		// L3 危急：自动降落，每 2 秒串口 + Web 双渠道提示
+		if (batteryVoltage < VBAT_CRITICAL_THRESHOLD) {
+			static float l3LastNotify = 0;
+			if (t - l3LastNotify >= 2.0f) {
+				print("电池电量告急(%.2fV)，自动降落，推力%.0f%%\n",
+				      batteryVoltage, thrustTarget * 100.0f);
+#if WEB_RC_ENABLED
+				char warnBuf[64];
+				snprintf(warnBuf, sizeof(warnBuf),
+				         "电池电量告急(%.2fV) 自动降落 推力%.0f%%",
+				         batteryVoltage, thrustTarget * 100.0f);
+				setWebRCWarn(warnBuf);
+#endif
+				l3LastNotify = t;
+			}
+			descend(); // 复用现有 descend()，速度由 descendTime（SF_DESCEND_TIME）控制
+		}
+		// L2：仅 LED 快闪（led.ino 的 batteryAlertActive() 负责）
+		return;
+	}
+
+	// --- 未解锁 / 解锁怠速（thrustTarget < 0.15）：检查 L1 ---
+	if (batteryVoltage < VBAT_WARN_THRESHOLD) {
+		if (armed) {
+			// 解锁怠速：自动上锁
+			armed = false;
+			thrustTarget = 0.0f;
+			print("电量低(%.2fV)，自动上锁\n", batteryVoltage);
+#if WEB_RC_ENABLED
+			char warnBuf[64];
+			snprintf(warnBuf, sizeof(warnBuf), "电量低(%.2fV) 已自动上锁", batteryVoltage);
+			setWebRCWarn(warnBuf);
+#endif
+		}
+		// 未解锁时的禁止解锁逻辑在 control.ino 手势处处理
 	}
 }

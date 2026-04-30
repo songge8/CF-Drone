@@ -10,7 +10,8 @@ extern float rollChannel, pitchChannel, throttleChannel, yawChannel, modeChannel
 extern int wifiMode, udpLocalPort, udpRemotePort;
 extern int motorPins[4];
 extern int pwmFrequency, pwmResolution, pwmStop, pwmMin, pwmMax;
-extern float idleThrust;
+extern float motThrMin;
+extern float motThrMax;
 extern int mavlinkSysId;
 extern Rate telemetrySlow, telemetryFast;
 extern float rcLossTimeout, descendTime;
@@ -85,7 +86,8 @@ Parameter parameters[] = {
 	{"MOT_PWM_STOP", &pwmStop},
 	{"MOT_PWM_MIN", &pwmMin},
 	{"MOT_PWM_MAX", &pwmMax},
-	{"MOT_IDLE_THRUST", &idleThrust},
+	{"MOT_THR_MIN", &motThrMin},
+	{"MOT_THR_MAX", &motThrMax},
 	// rc
 	{"RC_ZERO_0", &channelZero[0]},
 	{"RC_ZERO_1", &channelZero[1]},

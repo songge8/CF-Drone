@@ -40,7 +40,8 @@
 #define ARM_THROTTLE_LIMIT   0.05f  // 解锁油门上限（归一化后 0~1），5%，超过此值禁止解锁
 #define RATES_D_LPF_ALPHA 0.2 // cutoff frequency ~ 40 Hz
 
-float idleThrust = 0.1f;  // 解锁后怠速推力，默认 0.1，可通过参数 MOT_IDLE_THRUST 调节
+float motThrMin = 0.10f;  // 推力下限（摇杆最低位的输出），可通过参数 MOT_THR_MIN 调节
+float motThrMax = 1.0f;   // 推力上限（摇杆最高位的输出），可通过参数 MOT_THR_MAX 调节
 
 const int RAW = 0, ACRO = 1, STAB = 2, ALTHOLD = 3, AUTO = 4; // flight modes
 int mode = STAB;
@@ -117,7 +118,7 @@ void interpretControls() {
 
 	if (abs(controlYaw) < 0.1) controlYaw = 0; // yaw dead zone
 
-	thrustTarget = controlThrottle;
+	thrustTarget = mapf(controlThrottle, 0.0f, 1.0f, motThrMin, motThrMax);
 
 	if (mode == STAB) {
 		float yawTarget = attitudeTarget.getYaw();
@@ -141,7 +142,7 @@ void interpretControls() {
 }
 
 void controlAttitude() {
-	if (!armed || attitudeTarget.invalid() || thrustTarget < 0.1) return; // skip attitude control
+	if (!armed || attitudeTarget.invalid() || thrustTarget < motThrMin) return; // skip attitude control
 
 	const Vector up(0, 0, 1);
 	Vector upActual = Quaternion::rotateVector(up, attitude);
@@ -158,7 +159,7 @@ void controlAttitude() {
 
 
 void controlRates() {
-	if (!armed || ratesTarget.invalid() || thrustTarget < 0.1) return; // skip rates control
+	if (!armed || ratesTarget.invalid() || thrustTarget < motThrMin) return; // skip rates control
 
 	Vector error = ratesTarget - rates;
 
@@ -173,14 +174,6 @@ void controlTorque() {
 
 	if (!armed) {
 		memset(motors, 0, sizeof(motors)); // stop motors if disarmed
-		return;
-	}
-
-	if (thrustTarget < 0.1) {
-		motors[0] = idleThrust; // idle thrust
-		motors[1] = idleThrust;
-		motors[2] = idleThrust;
-		motors[3] = idleThrust;
 		return;
 	}
 

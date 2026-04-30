@@ -12,7 +12,7 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 <style>
 /*======== 响应式变量 ========*/
 :root{
-  --js-size:clamp(150px,min(50vw,52vh),360px);
+  --js-size:clamp(150px,min(50vw,62vh),420px);
   --knob-size:calc(var(--js-size)*0.25);
   --pad:clamp(6px,1.5vmin,15px);
   --gap:clamp(6px,1.5vmin,15px);
@@ -108,20 +108,20 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 竖屏自适应 ========*/
 @media (orientation:portrait){
-  :root{--js-size:clamp(150px,46vw,280px);--knob-size:calc(var(--js-size)*0.25)}
+  :root{--js-size:clamp(120px,40vw,240px);--knob-size:calc(var(--js-size)*0.25)}
   .content{
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:repeat(2,minmax(0,1fr));
     grid-template-rows:auto auto;
     height:auto;
     flex:none;
     overflow:visible;
   }
   .buttons-container{grid-column:1/3;grid-row:1}
-  .content>.joystick-container:first-child{grid-column:1;grid-row:2}
-  .content>.joystick-container:last-child{grid-column:2;grid-row:2}
+  .content>.joystick-container:first-child{grid-column:1;grid-row:2;min-width:0;overflow:hidden}
+  .content>.joystick-container:last-child{grid-column:2;grid-row:2;min-width:0;overflow:hidden}
   .header h1{font-size:clamp(0.85rem,3.5vw,1.1rem)}
-  .status-bar{gap:6px}
+  .status-bar{gap:5px;flex-wrap:wrap;justify-content:center}
   .status-item{font-size:clamp(0.6rem,2.5vw,0.7rem);padding:2px 5px}
 }
 
@@ -138,7 +138,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   .button-icon{font-size:0.88rem;margin-bottom:2px}
 }
 /*======== 版权页脚 ========*/
-.footer{text-align:center;font-size:0.6rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:1;}
+.footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
 .footer a{color:rgba(255,255,255,.3);text-decoration:none}
 .footer a:hover{color:rgba(255,255,255,.55)}
 </style>
@@ -151,10 +151,10 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
     <div class="status-bar">
       <div class="status-item"><span class="status-dot" id="status-dot"></span><span id="connection-text">连接中...</span></div>
       <div class="status-item" id="armed-status-item" style="background:rgba(255,51,51,0.15)"><span id="armed-status" style="color:#ff6666">已上锁</span></div>
-      <div class="status-item"><span>遥控延迟</span><span id="latency">-</span></div>
-      <div class="status-item"><span>丢包率</span><span id="packet-loss">0%</span></div>
       <div class="status-item"><span>飞行模式</span><span id="flight-mode">自稳</span></div>
       <div class="status-item"><span>电池电压</span><span id="battery">-</span></div>
+      <div class="status-item"><span>遥控延迟</span><span id="latency">-</span></div>
+      <div class="status-item"><span>丢包率</span><span id="packet-loss">0%</span></div>
       <div class="status-item"><span>油门:</span><span id="left-y">0</span><span>%</span></div>
       <div class="status-item"><span>偏航:</span><span id="left-x">0</span></div>
       <div class="status-item"><span>横滚:</span><span id="right-x">0</span></div>
@@ -195,7 +195,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
     </div>
   </div>
   <!-- 版权页脚 -->
-  <div class="footer"><a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">琛光无人机项目开源地址</a></div>
+  <div class="footer"><a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">琛光无人机开源项目</a></div>
 </div>
 
 <script>

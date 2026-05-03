@@ -80,7 +80,7 @@ void calibrateAccel() {
 	calibrateAccelOnce();
 
 	printIMUCalibration();
-	print("✓校准完成 Calibration done!\n");
+	print("✓校准完成！ 将机身放正后执行ps命令查看校准结果\n");
 	configureIMU();
 }
 

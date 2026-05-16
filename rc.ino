@@ -9,8 +9,8 @@ SBUS rc(BOARD_RC_SERIAL); // Serial2 on ESP32, Serial1 on ESP32-C3
 int rcRxPin = BOARD_RC_RX_PIN; // SBUS RX 引脚，-1 表示禁用 RC，可通过参数 RC_RX_PIN 配置
 uint16_t channels[16]; // raw rc channels
 float controlTime; // time of the last controls update
-float channelZero[16]; // calibration zero values
-float channelMax[16]; // calibration max values
+float channelZero[16]; // calibration zero values 每个通道的"零点"校准值（最小值/中心点）
+float channelMax[16]; // calibration max values 每个通道的"最大值"校准值
 
 // Channels mapping (using float to store in parameters):
 float rollChannel = NAN, pitchChannel = NAN, throttleChannel = NAN, yawChannel = NAN, modeChannel = NAN;

@@ -57,7 +57,7 @@
 #define BOARD_MOTOR_PINS   {12, 13, 15, 14}  // RL=GPIO12, RR=GPIO13, FR=GPIO15, FL=GPIO14
 #define BOARD_VBAT_ADC_PIN 36
 #define BOARD_RC_SERIAL    Serial2
-#define BOARD_RC_RX_PIN    16
+#define BOARD_RC_RX_PIN    4
 #define BOARD_SPI_SCK      18
 #define BOARD_SPI_MISO     19
 #define BOARD_SPI_MOSI     23

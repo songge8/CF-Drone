@@ -92,6 +92,25 @@ Vector ratesExtra; // feedforward rates
 Vector torqueTarget;
 float thrustTarget;
 
+// ============== 软件配平参数 ==============
+// 用于补偿机械不对称（重心偏移、电机/桨叶推力差异、IMU 安装偏斜等）引起的固定方向漂移。
+// 单位：弧度（rad）。
+//
+// 调整方法（串口/Web 控制台，无需重新烧录）：
+//   命令格式：p <参数名> <值>
+//   每次建议步长 0.005 rad（约 0.3°），逐步收敛至松杆不漂为止。
+//   参数自动存储到 Flash，断电后继续生效。
+//
+// 漂移方向与参数对照（松杆后观察）：
+//   飞机向左漂 → p CTL_TRIM_ROLL  -0.01  （负值）
+//   飞机向右漂 → p CTL_TRIM_ROLL  +0.01  （正值）
+//   飞机向前漂 → p CTL_TRIM_PITCH -0.01  （负值）
+//   飞机向后漂 → p CTL_TRIM_PITCH +0.01  （正值）
+//
+// 注意：电量变化、负载改变后配平值可能略有偏移，需偶尔重调。
+float trimRoll  = 0.0f; // 横滚配平角（rad），参数名：CTL_TRIM_ROLL
+float trimPitch = 0.0f; // 俯仰配平角（rad），参数名：CTL_TRIM_PITCH
+
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
 extern float motors[4];
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
@@ -152,7 +171,9 @@ void interpretControls() {
 	if (mode == STAB) {
 		float yawTarget = attitudeTarget.getYaw();
 		if (!armed || invalid(yawTarget) || controlYaw != 0) yawTarget = attitude.getYaw(); // reset yaw target
-		attitudeTarget = Quaternion::fromEuler(Vector(controlRoll * tiltMax, controlPitch * tiltMax, yawTarget));
+		// trimRoll/trimPitch 叠加到摇杆指令上，补偿机械不对称引起的固定漂移
+		// 调整方式见变量声明处注释，或通过 CLI: set CTL_TRIM_ROLL / CTL_TRIM_PITCH
+		attitudeTarget = Quaternion::fromEuler(Vector(controlRoll * tiltMax + trimRoll, controlPitch * tiltMax + trimPitch, yawTarget));
 		ratesExtra = Vector(0, 0, -controlYaw * maxRate.z); // positive yaw stick means clockwise rotation in FLU
 	}
 

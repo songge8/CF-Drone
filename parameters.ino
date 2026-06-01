@@ -20,6 +20,8 @@ extern Vector accBias, accScale;
 extern Vector imuRotation;
 extern LowPassFilter<Vector> gyroBiasFilter;
 extern int rcRxPin;
+extern float trimRoll, trimPitch;         // 软件配平参数，定义于 control.ino
+extern float levelGateThreshold;         // 摇杆门控阈值，定义于 estimate.ino
 
 Preferences storage;
 
@@ -59,6 +61,8 @@ Parameter parameters[] = {
 	{"CTL_R_RATE_MAX", &maxRate.x},
 	{"CTL_Y_RATE_MAX", &maxRate.z},
 	{"CTL_TILT_MAX", &tiltMax},
+	{"CTL_TRIM_ROLL",  &trimRoll},  // 横滚配平角(rad)，正值右滚。调整步长建议 0.005 rad
+	{"CTL_TRIM_PITCH", &trimPitch}, // 俯仰配平角(rad)，正值后仰。调整步长建议 0.005 rad
 	{"CTL_FLT_MODE_0", &flightModes[0]},
 	{"CTL_FLT_MODE_1", &flightModes[1]},
 	{"CTL_FLT_MODE_2", &flightModes[2]},
@@ -76,6 +80,7 @@ Parameter parameters[] = {
 	// estimate
 	{"EST_ACC_WEIGHT", &accWeight},
 	{"EST_RATES_LPF_A", &ratesFilter.alpha},
+	{"EST_LVL_GATE_THR", &levelGateThreshold}, // 摇杆门控阈值(0~1)，超过此值时 applyLevel 权重归零，防止松杆漂移
 	// motors
 	{"MOT_PIN_FL", &motorPins[MOTOR_FRONT_LEFT], setupMotors},
 	{"MOT_PIN_FR", &motorPins[MOTOR_FRONT_RIGHT], setupMotors},

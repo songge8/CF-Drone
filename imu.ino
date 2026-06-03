@@ -2,7 +2,7 @@
 // Work with the IMU sensor
 
 #include <SPI.h>
-#include <FlixPeriph.h>
+#include "drivers/MPU9250.h"
 #include "vector.h"
 #include "lpf.h"
 #include "util.h"

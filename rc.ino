@@ -3,7 +3,7 @@
 // 支持协议：CRSF/ELRS（默认）、SBUS（兼容）
 // 通过参数 RC_PROTOCOL 切换：0=SBUS, 1=CRSF(ELRS)
 
-#include <SBUS.h>
+#include "drivers/SBUS.h"
 #include "util.h"
 #include "board_config.h"
 

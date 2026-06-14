@@ -10,20 +10,23 @@
 
 MPU9250 imu(SPI, BOARD_SPI_CS);
 
-// IMU 超时等待：用 FreeRTOS 定时器替代库内部的 portMAX_DELAY 阻塞
-// 1kHz IMU 正常间隔 1ms，50ms 超时 = 允许连续丢 50 帧后主循环继续运行
-// 避免 IMU 硬件故障（SPI 短路/断路）时主循环死锁导致 HTTP/WiFi 服务无响应
+// IMU 超时等待
+// ESP32-C3（单核）：先无条件 vTaskDelay(1) 保证 WiFi 每帧获得 ~1ms CPU（模拟原始库
+//   xSemaphoreTake 的 blocked 效果，消除快路径不 yield 的问题），之后再读数据；
+//   50ms 超时兜底防止 IMU 故障时主循环死锁。
+// ESP32（双核）：WiFi 在 Core 0 独立运行，直接恢复原始库行为，效率最高。
 static bool imuWaitWithTimeout() {
-#ifdef ESP32
-	// 借用 FreeRTOS delay 实现：先让出 CPU 一帧（让 WiFi 任务运行），
-	// 再轮询 IMU 是否就绪，最长等 50ms
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+	vTaskDelay(1); // 先无条件让出 1ms，WiFi 本帧保证获得 CPU
+	if (imu.read()) return true;
 	unsigned long deadline = millis() + 50;
 	while (millis() < deadline) {
 		if (imu.read()) return true;
-		taskYIELD(); // 让出 CPU，给 WiFi/TCP 任务一个调度机会
+		vTaskDelay(1);
 	}
 	return false; // 超时，跳过本帧
 #else
+	// 双核 ESP32：恢复原始库行为，WiFi 在 Core 0 独立运行无需干预
 	imu.waitForData();
 	return true;
 #endif
@@ -125,6 +128,12 @@ void calibrateAccelOnce() {
 		Vector sample;
 		imu.getAccel(sample.x, sample.y, sample.z);
 		acc = acc + sample;
+
+	#ifdef CONFIG_IDF_TARGET_ESP32C3
+		// 每10帧主动让出1ms，防止单核ESP32-C3上WiFi任务因连续采样而饿死导致Beacon丢失
+		if (i % 10 == 0) delay(1);
+	#endif
+	
 	}
 	acc = acc / samples;
 

@@ -226,7 +226,6 @@ let currentFlightMode = 2; // 当前飞行模式编号（与后端同步：2=自
 let buttonStates     = new Array(16).fill(false);
 let lastButtonStates = new Array(16).fill(false);
 
-let lastPressedButton = -1; // 最近一次操作的按鈕编号，用于后端返回时判断结果 toast
 let consolePollingTimer = null;
 let consoleLastTotal    = 0;   // 增量拉取游标：已展示到第 N 行
 let consoleFetchInFlight = false; // 防并发：上次 fetch 未返回时跳过本次
@@ -443,27 +442,29 @@ function sendToESP(url, data) {
         document.getElementById('flight-mode').textContent = names[resp.m] || '自稳';
       }
 
-      // ARM 状态更新 + 结果 toast
+      // ARM 状态更新（所有响应都同步显示）
       if (resp.arm !== undefined) {
         const el   = document.getElementById('armed-status');
         const item = document.getElementById('armed-status-item');
         el.textContent = resp.arm ? '已解锁' : '已上锁';
         item.style.background = resp.arm ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,51,0.15)';
         el.style.color = resp.arm ? '#00ff88' : '#ff6666';
-        if (!resp.warn) {
-          if (lastPressedButton === 0)
-            showToast(resp.arm ? '✅ 已解锁' : '❌ 解锁失败');
-          else if (lastPressedButton === 1)
-            showToast(resp.arm ? '⚠️ 上锁失败' : '🔒 已上锁');
-          else if (lastPressedButton === 2)
-            showToast('🛑 电机已停止');
-        }
       }
 
-      // 后端警告——最后处理，保证覆盖前面的 toast
-      if (resp.warn) showToast('⚠️ ' + resp.warn);
-
-      lastPressedButton = -1; // 清空，避免摇杆包轮询触发
+      // 按钮松开确认 toast：仅当响应来自按钮事件（rt=2）且为松开（bs=0）时触发
+      // 通过后端 rt/bi/bs 字段判断，彻底消除 lastPressedButton 的响应顺序竞态
+      if (resp.rt === 2 && resp.bs === 0) {
+        if (!resp.warn) {
+          if (resp.bi === 0)
+            showToast(resp.arm ? '✅ 已解锁' : '❌ 解锁失败');
+          else if (resp.bi === 1)
+            showToast(resp.arm ? '⚠️ 上锁失败' : '🔒 已上锁');
+          else if (resp.bi === 2)
+            showToast('🛑 电机已停止');
+        }
+        // 后端警告——最后处理，保证覆盖前面的 toast
+        if (resp.warn) showToast('⚠️ ' + resp.warn);
+      }
     })
     .catch(() => {
       if (++consecutiveFails >= 3) updateConnectionStatus(false);
@@ -519,25 +520,19 @@ function handleButton(idx) {
     if (currentFlightMode === 2)      nextBit = 7; // STAB→ACRO
     else if (currentFlightMode === 1) nextBit = 8; // ACRO→ALTHOLD
     else                              nextBit = 6; // 其他→STAB
-    lastPressedButton = 3;
     sendButtonData(nextBit, 1);
     setTimeout(() => sendButtonData(nextBit, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 解锁/上锁/急停：点击时显示中间态。
-  // lastPressedButton 必须在 state=0 发送前设置：
-  // state=1 的响应返回时 interpretWebRC 还未执行（armed 未变）；
-  // state=0 的响应返回时 armed 已由 control 循环更新，才是真实结果。
+  // 解锁/上锁/急停：先发按下（state=1），100ms后发松开（state=0）
+  // 后端响应中携带 rt/bi/bs，前端用这些字段判断 toast，无需 lastPressedButton
   if (idx === 0 || idx === 1 || idx === 2) {
     if (idx === 0)      showToast('🔓 解锁中...');
     else if (idx === 1) showToast('🔒 上锁中...');
     else if (idx === 2) showToast('🛑 急停指令发送中...');
     sendButtonData(idx, 1);
-    setTimeout(() => {
-      lastPressedButton = idx; // 在 state=0 发出前标记，确保用 state=0 的响应判断结果
-      sendButtonData(idx, 0);
-    }, 100);
+    setTimeout(() => sendButtonData(idx, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
   }
 }

@@ -20,7 +20,12 @@ bool webRCEnabled    = false;  // Web RC 当前有有效连接（由 readWebRC()
 bool useWebRC        = false;  // 当前正在使用 Web RC 控制（与 webRCEnabled 保持同步）
 bool webRCUpdated    = false;  // 收到过至少一次摇杆数据（首次连接前为 false）
 bool webConsoleEnabled = false; // Web 调试控制台开关：POST /console/enable 开启，开启后 print() 写入缓冲区
-static char webRCWarnMsg[64] = ""; // 待发送给前端的警告消息，发送一次后自动清空
+char webRCWarnMsg[64] = ""; // 待发送给前端的警告消息，发送一次后自动清空
+
+// ==================== 最后处理的请求上下文（供响应构造使用）====================
+static int lastProcType        = 0;   // 1=摇杆 2=按钮 4=心跳
+static int lastProcButtonIdx   = -1;  // 按钮事件：按钮序号（0~15），其他请求为 -1
+static int lastProcButtonState = -1;  // 按钮事件：按下=1/松开=0，其他请求为 -1
 
 // ==================== 摇杆暂存值（供状态端点读取）====================
 // 单位：油门 0~100（%），姿态轴 ±30（°），按下=1/松开=0
@@ -211,6 +216,10 @@ bool handleJSONProtocol(String& body) {
     int type = atoi(typePos + 4);
     const char* v;
 
+    lastProcType        = type;
+    lastProcButtonIdx   = -1;
+    lastProcButtonState = -1;
+
     switch (type) {
         case 1: { // 摇杆数据
             float th = 0, r = 0, p = 0, y = 0;
@@ -234,6 +243,8 @@ bool handleJSONProtocol(String& body) {
                 else       webRCButtons &= ~(1 << idx);
                 webRCLastUpdate = millis();
                 webRCUpdated    = true;
+                lastProcButtonIdx   = idx;
+                lastProcButtonState = state;
             }
             break;
         }
@@ -250,6 +261,7 @@ void setWebRCWarn(const char* msg) {
     webRCWarnMsg[sizeof(webRCWarnMsg) - 1] = '\0';
 }
 
+// ==================== 最后处理的请求上下文（供响应构造使用）====================
 // ==================== HTTP 请求处理 ====================
 
 void handleWebRCRequest() {
@@ -259,16 +271,31 @@ void handleWebRCRequest() {
     }
     String body = webRCServer.arg("plain");
     if (handleJSONProtocol(body)) {
-        char resp[256];
-        if (webRCWarnMsg[0]) {
-            snprintf(resp, sizeof(resp),
-                "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"warn\":\"%s\"}",
-                mode, (int)armed, webRCWarnMsg);
+        char resp[320];
+        // warn 仅在按钮事件响应中携带并清除；摇杆/心跳包不消费 warn，
+        // 避免摇杆包抢在 state=0 响应之前把 warn 清掉
+        bool deliverWarn = (lastProcType == 2) && webRCWarnMsg[0];
+        if (deliverWarn) {
+            if (lastProcButtonIdx >= 0) {
+                snprintf(resp, sizeof(resp),
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d,\"warn\":\"%s\"}",
+                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState, webRCWarnMsg);
+            } else {
+                snprintf(resp, sizeof(resp),
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"warn\":\"%s\"}",
+                    mode, (int)armed, lastProcType, webRCWarnMsg);
+            }
             webRCWarnMsg[0] = '\0'; // 发送后立即清空
         } else {
-            snprintf(resp, sizeof(resp),
-                "{\"s\":\"ok\",\"m\":%d,\"arm\":%d}",
-                mode, (int)armed);
+            if (lastProcButtonIdx >= 0) {
+                snprintf(resp, sizeof(resp),
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d}",
+                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState);
+            } else {
+                snprintf(resp, sizeof(resp),
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d}",
+                    mode, (int)armed, lastProcType);
+            }
         }
         webRCServer.send(200, "application/json", resp);
     } else {

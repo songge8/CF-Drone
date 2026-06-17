@@ -312,10 +312,12 @@ void interpretWebRC() {
 	// 按鈕。0：解锁（上升沿）
 	if (risingEdge & 0x0001) {
 		extern bool imuOK;
+		extern char webRCWarnMsg[];
 		if (!imuOK) {
 			setWebRCWarn("IMU故障 禁止解锁");
 		} else if (controlThrottle < ARM_THROTTLE_LIMIT) {
 			armed = true;
+			webRCWarnMsg[0] = '\0'; // 解锁成功，清除上次遗留的警告
 		} else {
 			setWebRCWarn("油门过高，无法解锁");
 		}

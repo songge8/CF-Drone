@@ -23,14 +23,14 @@ extern int mode;
 extern bool armed;
 
 const char* motd =
-"输入命令，然后回车:\n"
+"CLI命令菜单，输入相应命令，回车后执行:\n"
 "help - 帮助\n"
 "p - 显示所有参数\n"
 "p <name> - 显示指定参数\n"
 "p <name> <value> - 设置参数\n"
 "p MOT_PIN_FL 14 - 参数设置示例，前左电机引脚为14\n"
 "preset - 重置参数存储，设置参数后运行此命令\n"
-"mfr, mfl, mrr, mrl - 测试马达 (马达会全速运转，为了安全不要装桨叶！！！)\n"
+"mfr, mfl, mrr, mrl - 测试马达 (马达不受算法影响运转，为了安全不要装桨叶！！！)\n"
 "ca - 校准陀螺仪加速度计\n"
 "ps - 显示pitch/roll/yaw姿态\n"
 "cr - 校准RC遥控器\n"

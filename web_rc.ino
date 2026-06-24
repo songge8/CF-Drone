@@ -5,6 +5,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include "web_rc_html.h"
+#include "board_config.h"
 
 // 飞控统一控制变量（供协议适配层写入，与 SBUS/MAVLink 共用）
 extern float t;
@@ -74,8 +75,8 @@ static WiFiServer* redirectServer8080 = nullptr;
 // ------旧PCB印刷地址访问 :8080 → 301跳转到80端口；旧地址全部淘汰后可删除------------
 
 // ==================== 控制台日志缓冲区 ====================
-#define CONSOLE_LINES    50
-#define CONSOLE_LINE_LEN 240
+#define CONSOLE_LINES    BOARD_CONSOLE_LINES    // 控制台行数：C3=20（节省~7KB RAM）/ ESP32&S3=50
+#define CONSOLE_LINE_LEN BOARD_CONSOLE_LINE_LEN  // 每行字符数：C3=160 / ESP32&S3=240
 static char consoleBuf[CONSOLE_LINES][CONSOLE_LINE_LEN];
 static int  consoleTail   = 0;
 static int  consoleFilled = 0;
@@ -305,9 +306,6 @@ void handleWebRCRequest() {
     }
 }
 
-// ==================== 电池电压 ====================
-// readBatteryVoltage() 已迁移至 battery.ino，此处直接调用即可
-
 // ==================== 连接状态 ====================
 
 bool isWebRCEnabled() {
@@ -365,6 +363,7 @@ static void handleRedirect8080() {
 // ==================== 主设置函数 ====================
 
 void setupWebRC() {
+    print("Setup WEB RC\n");
     lastValidThrottle = THROTTLE_MIN;
     lastValidRoll = lastValidPitch = lastValidYaw = 0.0f;
 
@@ -468,7 +467,7 @@ void setupWebRC() {
 #endif
     // ------旧PCB印刷地址访问 :8080 → 301跳转到80端口；旧地址全部淘汰后可删除------------
 
-    print("✓ Web RC 已启动: http://192.168.4.1\n");
+    print("✓ Web RC 已启动，访问地址: http://192.168.4.1\n");
     print("  死区 摇杆=%.0f%% 油门=%.0f%% | 缩放 摇杆=%.2f 偏航=%.2f\n",
           stickDeadzone * 100.0f, throttleDeadzone * 100.0f,
           webRCStickScale, webRCYawScale);

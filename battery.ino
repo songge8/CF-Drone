@@ -3,8 +3,8 @@
 
 #include "board_config.h"
 
-#define VBAT_ADC_PIN       BOARD_VBAT_ADC_PIN  // 电池电压采样引脚
-#define VBAT_ADC_SAMPLES   16               // ADC多次采样取均值，越大噪声越低、响应越慢
+#define VBAT_ADC_PIN       BOARD_VBAT_ADC_PIN     // 电池电压采样引脚
+#define VBAT_ADC_SAMPLES   BOARD_VBAT_ADC_SAMPLES  // ADC采样数：C3=8（减少阻塞）/ ESP32&S3=16（更低噪声）
 #define VBAT_DIVIDER       (43.0f / 33.0f)  // 分压比：上桥10kΩ+下桥33kΩ，公式 Vbat = Vadc × 43/33
 #define VBAT_WARN_THRESHOLD     3.5f  // L1：空载/怠速预警门限（V）
 #define VBAT_LOW_THRESHOLD      3.3f  // L2：飞行中低电告警门限（V）

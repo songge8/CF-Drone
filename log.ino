@@ -4,8 +4,10 @@
 #include "vector.h"
 #include "util.h"
 
+#include "board_config.h"
+
 #define LOG_RATE 100
-#define LOG_DURATION 8
+#define LOG_DURATION BOARD_LOG_DURATION  // 缓冲时长：C3=4秒（节省~22KB RAM）/ ESP32&S3=8秒
 #define LOG_SIZE LOG_DURATION * LOG_RATE
 
 Vector attitudeEuler;

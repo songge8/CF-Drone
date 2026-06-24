@@ -36,6 +36,15 @@
 #define BOARD_LED_PIN      8
 #define BOARD_LED_INVERTED 1               // 低电平点亮
 
+// ---- 性能与资源配置（C3 轻量化）----
+#define BOARD_VBAT_ADC_SAMPLES       8    // ADC采样次数 减少 ADC 阻塞时间，ESP32/S3 默认 16
+#define BOARD_LOG_DURATION           4    // 日志 4 秒缓冲，节省约 22 KB RAM，ESP32/S3 默认 8 秒
+#define BOARD_CONSOLE_LINES          20   // 控制台行数，节省约 7 KB RAM，ESP32/S3 默认 50
+#define BOARD_CONSOLE_LINE_LEN       160  // 每行字符数，ESP32/S3 默认 240
+#define BOARD_MAVLINK_TELEM_FAST_HZ  5    // MAVLink 快速遥测降速，降低 WiFi 占用，ESP32/S3 默认 10 Hz
+#define BOARD_WIFI_ENABLED           0    // C3 单核：WiFi 与飞控共享 CPU，关闭可彻底释放资源给飞控
+#define BOARD_WEB_RC_ENABLED         0    // Web 遥控器依赖 WiFi，随 BOARD_WIFI_ENABLED 同步关闭
+
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 // ---------------------- ESP32S3 -------------------------
 
@@ -64,6 +73,15 @@
 #define BOARD_LED_PIN      2
 #define BOARD_LED_INVERTED 0
 
+// ---- 性能与资源配置（S3 标准）----
+#define BOARD_VBAT_ADC_SAMPLES       16 // ADC采样次数
+#define BOARD_LOG_DURATION           8  // 日志缓冲秒数
+#define BOARD_CONSOLE_LINES          50  // 控制台行数
+#define BOARD_CONSOLE_LINE_LEN       240  // 每行字符数
+#define BOARD_MAVLINK_TELEM_FAST_HZ  10  // MAVLink 快速遥测降速
+#define BOARD_WIFI_ENABLED           1
+#define BOARD_WEB_RC_ENABLED         1
+
 #else  // ---- ESP32 默认配置 ----
 // ---------------------- 默认ESP32 -------------------------
 
@@ -82,4 +100,21 @@
 #define BOARD_LED_PIN      2               // LED 引脚（GPIO2）
 #define BOARD_LED_INVERTED 0               // 高电平点亮
 
+// ---- 性能与资源配置（ESP32 标准）----
+#define BOARD_VBAT_ADC_SAMPLES       16 // ADC采样次数
+#define BOARD_LOG_DURATION           8  // 日志缓冲秒数
+#define BOARD_CONSOLE_LINES          50  // 控制台行数
+#define BOARD_CONSOLE_LINE_LEN       240  // 每行字符数
+#define BOARD_MAVLINK_TELEM_FAST_HZ  10  // MAVLink 快速遥测降速
+#define BOARD_WIFI_ENABLED           1  // WIFI开关
+#define BOARD_WEB_RC_ENABLED         1  // Web遥控器开关
+
+#endif
+
+// ---- WiFi / Web RC 开关充底（未知芯片默认全开）----
+#if !defined(BOARD_WIFI_ENABLED)
+#define BOARD_WIFI_ENABLED   1
+#endif
+#if !defined(BOARD_WEB_RC_ENABLED)
+#define BOARD_WEB_RC_ENABLED 1
 #endif

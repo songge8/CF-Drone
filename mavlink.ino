@@ -5,10 +5,11 @@
 
 #include <MAVLink.h>
 #include "util.h"
+#include "board_config.h"
 
 int mavlinkSysId = 1;
 Rate telemetrySlow(2);
-Rate telemetryFast(10);
+Rate telemetryFast(BOARD_MAVLINK_TELEM_FAST_HZ);  // 遥测频率：C3=5Hz（降低WiFi占用）/ ESP32&S3=10Hz
 
 bool mavlinkConnected = false;
 String mavlinkPrintBuffer;

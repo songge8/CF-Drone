@@ -51,9 +51,19 @@ void readIMU() {
 	acc = (acc - accBias) / accScale;
 	gyro = gyro - gyroBias;
 	// rotate to body frame using imuRotation Euler angles
-	Quaternion rotation = Quaternion::fromEuler(imuRotation);
-	acc  = Quaternion::rotateVector(acc,  rotation.inversed());
-	gyro = Quaternion::rotateVector(gyro, rotation.inversed());
+	// 旋转四元数缓存：imuRotation 为运行时常量（仅参数变更时改变），
+	// 缓存后每帧仅做 3 次浮点比较，消除原先每帧 6 次 sinf/cosf 调用。
+	// 参数更新后首次 readIMU() 调用自动重建缓存，延迟仅 1 帧（~1 ms）。
+	static Quaternion _imuRotQuat;
+	static float _cachedRotX = NAN, _cachedRotY = NAN, _cachedRotZ = NAN;
+	if (imuRotation.x != _cachedRotX || imuRotation.y != _cachedRotY || imuRotation.z != _cachedRotZ) {
+		_imuRotQuat = Quaternion::fromEuler(imuRotation).inversed();
+		_cachedRotX = imuRotation.x;
+		_cachedRotY = imuRotation.y;
+		_cachedRotZ = imuRotation.z;
+	}
+	acc  = Quaternion::rotateVector(acc,  _imuRotQuat);
+	gyro = Quaternion::rotateVector(gyro, _imuRotQuat);
 }
 
 void calibrateGyroOnce() {

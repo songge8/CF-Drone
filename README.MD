@@ -7,17 +7,39 @@ ESP32无人机飞控固件
 支持6500/9250姿态传感器
 
 ## 官方硬件
-完美适配琛光E1系列无人机，嘉立创开源平台工程链接：
-E1_MINI https://oshwhub.com/songge8/project_qqqyfdkm
-E1_Nano https://oshwhub.com/songge8/project_fnvbukbz
+完美适配琛光E1系列无人机
+
+### 琛光E1_MINI 开源无人机
+工程文档 https://oshwhub.com/songge8/project_qqqyfdkm  
+购买套件 https://item.taobao.com/item.htm?ft=t&id=1098812979567  
+支持官方扩展模块，可定高、悬停。
+
+### 琛光E1_Nano 超小无人机
+工程文档 https://oshwhub.com/songge8/project_fnvbukbz  
+购买套件 https://item.taobao.com/item.htm?ft=t&id=1099763930032
+
+### 琛光RC1 开源遥控
+硬件开源，飞控端适配代码即将更新，可使用官方固件体验  
+工程文档 https://oshwhub.com/songge8/project_wajhbuzm
 
 # 更新日志
+
+## 20260718
+优化参数存储
+
+## 20260624
+优化配置分类
+
+## 20260618
+优化网页遥控提示等
+
+## 20260617
+* 优化IMU故障处理
 
 ## 20260521
 * 优化姿态控制
 
 ## 20260520
-* 适配ESP32-C3
 * 优化PWM频率，减轻MOS管压力
 
 ## 20260515
@@ -30,7 +52,7 @@ E1_Nano https://oshwhub.com/songge8/project_fnvbukbz
 * 优化网页遥控界面
 
 ## 20260428
-* 适配EPS32-C3、ESP32-S3
+* 适配ESP32-S3
 
 ## 20260417
 * 修复调试日志显示不全的BUG，并优化提示命令显示
